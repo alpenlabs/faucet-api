@@ -1,11 +1,9 @@
+use axum::{routing::get, Router};
+use bdk_wallet::{bitcoin::{bip32::{ChildNumber, Xpriv}, Network}, miniscript::descriptor::checksum::desc_checksum, rusqlite::Connection, KeychainKind, Wallet};
+use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::{
-    cmp::Ordering,
-    collections::BinaryHeap,
-    net::Ipv4Addr,
-    rc::Rc,
-    sync::{Arc, OnceLock},
-    time::{Duration, Instant},
+    cmp::Ordering, collections::BinaryHeap, io, net::Ipv4Addr, rc::Rc, sync::{Arc, OnceLock}, time::{Duration, Instant}
 };
 use tokio::time::sleep;
 
@@ -15,8 +13,82 @@ use parking_lot::{lock_api::MutexGuard, Mutex, RawMutex};
 use rand::{thread_rng, Rng};
 use sha2::Sha256;
 
-fn main() {
+const DB_PATH: &str = "faucet.sqlite";
+const KEY_PATH: &str = "faucet.key";
+const NETWORK: Network = Network::Signet;
+const ESPLORA_URL: &str = "https://mutinynet.com/api";
+
+#[derive(Serialize, Deserialize)]
+pub struct Seed {
+    seed: String,
+    l1_descriptor: String,
+}
+
+impl Seed {
+    fn save(&self) -> io::Result<()> {
+        std::fs::write(KEY_PATH, serde_json::to_string_pretty(self)?)
+    }
+
+    fn read() -> io::Result<Option<Self>> {
+        if std::path::Path::new(KEY_PATH).exists() {
+            let content = std::fs::read_to_string(KEY_PATH)?;
+            Ok(serde_json::from_str(&content)?)
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+fn bytes_to_hex(bytes: &[u8]) -> String {
+    let hex_string = bytes.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+    hex_string
+}
+
+#[tokio::main]
+async fn main() {
     tracing_subscriber::fmt().init();
+    let mut conn = Connection::open(DB_PATH).unwrap();
+
+    let seed: [u8; 32] = thread_rng().gen();
+    let rootpriv = Xpriv::new_master(Network::Signet, &seed).expect("valid xpriv");
+    let purpose = ChildNumber::from_hardened_idx(86).unwrap();
+    let coin_type = ChildNumber::from_hardened_idx(0).unwrap();
+    let account = ChildNumber::from_hardened_idx(0).unwrap();
+    let descriptor = format!("tr({}/{}/{}/{}",
+        rootpriv,
+        purpose,
+        coin_type,
+        account
+    );
+
+    let savable = Seed {
+        seed: bytes_to_hex(&seed),
+        l1_descriptor: format!("{descriptor})")
+    };
+
+    let external_desc = format!("{descriptor}/0)");
+    let internal_desc = format!("{descriptor}/1)");
+
+    savable.save().expect("should be able to save");
+
+    let wallet_opt = Wallet::load()
+            .descriptor(KeychainKind::External, Some(external_desc))
+            .descriptor(KeychainKind::Internal, Some(internal_desc))
+            .extract_keys()
+            .check_network(NETWORK)
+            .load_wallet(&mut conn);
+
+
+
+    // let descriptor = descriptor!(
+    //     tr(kp.public_key())
+    // );
+    // build our application with a single route
+    let app = Router::new().route("/", get(|| async { "Hello, World!" }));
+
+    // run our app with hyper, listening globally on port 3000
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
 pub struct Challenge {
@@ -161,10 +233,12 @@ impl EvictionQueue {
             return;
         } else if heap.len() < 100 {
             let mut expired = ArrayVec::<_, 100>::new();
+            // heap lock is auto dropped because moved into the heap
             pull_expired(heap, &mut expired, 100);
             delete_expired(&expired);
         } else {
             let mut expired = ArrayVec::<_, 1000>::new();
+            // heap lock is auto dropped because moved into the heap
             let more_to_expire = pull_expired(heap, &mut expired, 1000);
             delete_expired(&expired);
             if more_to_expire {
