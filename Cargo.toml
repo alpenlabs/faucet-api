@@ -4,13 +4,17 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+alloy = { version = "0.3.3", default-features = false, features = ["std", "rpc-client-ws"] }
 arrayvec = "0.7.6"
 axum = { version = "0.7.5", features = ["http2"] }
+bdk_esplora = { version = "0.17.0", features = ["async-https", "async-https-rustls"], default-features = false }
+bdk_wallet = { version = "1.0.0-beta.2", features = ["rusqlite"] }
 concurrent-map = "5.0.37"
 parking_lot = "0.12.3"
 rand = "0.8.5"
 serde = { version = "1.0.210", features = ["derive"] }
+serde_json = "1.0.128"
 sha2 = { version = "0.10.8", features = ["asm", "loongarch64_asm"] }
-tokio = { version = "1.40.0", features = ["full"] }
+tokio = { version = "1.40.0", features = ["macros", "net", "parking_lot", "rt-multi-thread", "time"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
