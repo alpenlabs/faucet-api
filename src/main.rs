@@ -1,3 +1,6 @@
+//! A simple faucet server that uses [`axum`] and [`bdk_wallet`]
+//! to generate and dispense bitcoin.
+
 pub mod hex;
 pub mod macros;
 

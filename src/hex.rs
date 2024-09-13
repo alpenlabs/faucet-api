@@ -1,3 +1,5 @@
+//! A module for encoding and decoding hexadecimal strings.
+
 use crate::err;
 use terrors::OneOf;
 
