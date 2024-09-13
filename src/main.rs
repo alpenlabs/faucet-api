@@ -1,19 +1,28 @@
 pub mod hex;
 pub mod macros;
 
-use bdk_wallet::rusqlite;
 use axum::{routing::get, Router};
+use bdk_wallet::rusqlite;
 use bdk_wallet::{
     bitcoin::{
         bip32::{ChildNumber, Xpriv},
         Network,
-    }, rusqlite::Connection, ChangeSet, KeychainKind, Wallet, WalletPersister
+    },
+    rusqlite::Connection,
+    ChangeSet, KeychainKind, Wallet, WalletPersister,
 };
 use hex::{decode, encode};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::{
-    cell::RefCell, cmp::Ordering, collections::BinaryHeap, io, net::Ipv4Addr, rc::Rc, sync::{Arc, OnceLock}, time::{Duration, Instant}
+    cell::RefCell,
+    cmp::Ordering,
+    collections::BinaryHeap,
+    io,
+    net::Ipv4Addr,
+    rc::Rc,
+    sync::{Arc, OnceLock},
+    time::{Duration, Instant},
 };
 use tokio::time::sleep;
 
@@ -71,7 +80,10 @@ impl WalletPersister for Persister {
         Ok(changeset)
     }
 
-    fn persist(_persister: &mut Self, changeset: &bdk_wallet::ChangeSet) -> Result<(), Self::Error> {
+    fn persist(
+        _persister: &mut Self,
+        changeset: &bdk_wallet::ChangeSet,
+    ) -> Result<(), Self::Error> {
         let db = Self::db();
         let mut db_ref = db.borrow_mut();
         let db_tx = db_ref.transaction()?;
@@ -136,7 +148,8 @@ async fn main() {
     let address = l1_wallet.next_unused_address(KeychainKind::External);
     dbg!(address);
 
-    let app = Router::new().route("/", get(|| async { "Hello, World!" }))
+    let app = Router::new()
+        .route("/", get(|| async { "Hello, World!" }))
         .with_state(Arc::new(l1_wallet));
 
     // run our app with hyper, listening globally on port 3000
