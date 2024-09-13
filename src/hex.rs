@@ -154,7 +154,7 @@ impl TryFrom<u8> for HexChar {
 impl From<HexChar> for u8 {
     /// Converts the character to its [`u8`] equivalent. Eg, 'a' becomes 10.
     ///
-    /// SAFETY: self is checked to be a valid hex character by [`HexChar`]'s
+    /// SAFETY: self is checked to be a valid hex character by `HexChar`'s
     /// [`TryFrom`] implementation.
     fn from(val: HexChar) -> Self {
         val.c as u8 - val.kind.offset()
