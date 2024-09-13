@@ -73,6 +73,7 @@ pub struct WrongBufLength {
 
 #[derive(Debug)]
 pub struct BadByte {
+    #[allow(dead_code)]
     byte: usize,
 }
 
@@ -113,9 +114,9 @@ impl TryFrom<&u8> for HexCharKind {
 impl HexCharKind {
     const fn offset(&self) -> u8 {
         match self {
-            HexCharKind::Uppercase => 'A' as u8 - 0xA,
-            HexCharKind::Lowercase => 'a' as u8 - 0xa,
-            HexCharKind::Number => '0' as u8 - 0x0,
+            HexCharKind::Uppercase => b'A' - 0xA,
+            HexCharKind::Lowercase => b'a' - 0xa,
+            HexCharKind::Number => b'0',
         }
     }
 }
@@ -148,19 +149,19 @@ impl TryFrom<u8> for HexChar {
     }
 }
 
-impl Into<u8> for HexChar {
+impl From<HexChar> for u8 {
     /// Converts the character to its [`u8`] equivalent. Eg, 'a' becomes 10.
     ///
     /// SAFETY: self is checked to be a valid hex character by [`HexChar`]'s
     /// [`TryFrom`] implementation.
-    fn into(self) -> u8 {
-        self.c as u8 - self.kind.offset()
+    fn from(val: HexChar) -> Self {
+        val.c as u8 - val.kind.offset()
     }
 }
 
-impl Into<char> for HexChar {
-    fn into(self) -> char {
-        self.c
+impl From<HexChar> for char {
+    fn from(val: HexChar) -> Self {
+        val.c
     }
 }
 
