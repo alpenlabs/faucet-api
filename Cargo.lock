@@ -852,9 +852,9 @@ dependencies = [
 
 [[package]]
 name = "bdk_esplora"
-version = "0.17.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ac3c89662ed981033ca27fa33c7446ecbadb65b39edbfe1d1f2e066003fc373"
+checksum = "0c634a189c83cbf85bc28b22811d4425fd5cff31fb7ee8859452d9cc687f763b"
 dependencies = [
  "async-trait",
  "bdk_core",
