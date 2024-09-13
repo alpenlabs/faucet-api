@@ -35,6 +35,7 @@ use sha2::Sha256;
 const DB_PATH: &str = "faucet.sqlite";
 const KEY_PATH: &str = "faucet.key";
 const NETWORK: Network = Network::Signet;
+#[allow(dead_code)]
 const ESPLORA_URL: &str = "https://mutinynet.com/api";
 
 #[derive(Serialize, Deserialize)]
@@ -158,6 +159,7 @@ async fn main() {
 }
 
 pub struct Challenge {
+    #[allow(dead_code)]
     nonce: Nonce,
     expires_at: Instant,
 }
@@ -189,6 +191,7 @@ impl Challenge {
 
 pub struct ProofOfWorkChallenge {
     target_prefixed_zeros: u8,
+    #[allow(dead_code)]
     ip: Ipv4Addr,
     nonce: Nonce,
 }
@@ -290,11 +293,13 @@ impl EvictionQueue {
 
     /// Removes expired entries from the heap and deletes them from the nonce set.
     /// This function is called internally by `remove_expired` and `add_nonce`. It handles two cases:
+    ///
     /// - When the heap has less than 100 items, it creates an `ArrayVec` of size 100 to store expired entries.
     ///   It then pulls expired entries from the heap and adds them to the `ArrayVec`, up to a limit of 100.
     /// - When the heap has 100 or more items, it creates an `ArrayVec` of size 1000 to store expired entries.
     ///   It then pulls expired entries from the heap and adds them to the `ArrayVec`, up to a limit of 1000.
     ///   If there are still more expired entries in the heap, it calls `remove_expired` recursively.
+    ///
     /// Finally, it deletes the expired entries from the nonce set using the `delete_expired` function.
     /// This means the function does not heap allocate and it doesn't hold the lock while it's deleting
     /// pulled, expired items.
@@ -316,7 +321,7 @@ impl EvictionQueue {
         let more_to_expire = pull_expired(heap, &mut expired, 1000);
         delete_expired(&expired);
         if more_to_expire {
-            return self.remove_expired();
+            self.remove_expired()
         }
     }
 }
