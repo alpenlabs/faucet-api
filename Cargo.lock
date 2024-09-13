@@ -1367,6 +1367,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "terrors",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3152,6 +3153,12 @@ dependencies = [
  "rustix",
  "windows-sys 0.59.0",
 ]
+
+[[package]]
+name = "terrors"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5cf7ea47fef0cef7fcdeea0fe2585c66f4334c0d0250a8e77d01a8a46d89fd6"
 
 [[package]]
 name = "thiserror"

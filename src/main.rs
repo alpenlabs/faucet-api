@@ -1,9 +1,19 @@
+pub mod hex;
+pub mod macros;
+
+use bdk_wallet::rusqlite;
 use axum::{routing::get, Router};
-use bdk_wallet::{bitcoin::{bip32::{ChildNumber, Xpriv}, Network}, miniscript::descriptor::checksum::desc_checksum, rusqlite::Connection, KeychainKind, Wallet};
+use bdk_wallet::{
+    bitcoin::{
+        bip32::{ChildNumber, Xpriv},
+        Network,
+    }, rusqlite::Connection, ChangeSet, KeychainKind, Wallet, WalletPersister
+};
+use hex::{decode, encode};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::{
-    cmp::Ordering, collections::BinaryHeap, io, net::Ipv4Addr, rc::Rc, sync::{Arc, OnceLock}, time::{Duration, Instant}
+    cell::RefCell, cmp::Ordering, collections::BinaryHeap, io, net::Ipv4Addr, rc::Rc, sync::{Arc, OnceLock}, time::{Duration, Instant}
 };
 use tokio::time::sleep;
 
@@ -19,12 +29,12 @@ const NETWORK: Network = Network::Signet;
 const ESPLORA_URL: &str = "https://mutinynet.com/api";
 
 #[derive(Serialize, Deserialize)]
-pub struct Seed {
+pub struct SavableSeed {
     seed: String,
     l1_descriptor: String,
 }
 
-impl Seed {
+impl SavableSeed {
     fn save(&self) -> io::Result<()> {
         std::fs::write(KEY_PATH, serde_json::to_string_pretty(self)?)
     }
@@ -39,52 +49,95 @@ impl Seed {
     }
 }
 
-fn bytes_to_hex(bytes: &[u8]) -> String {
-    let hex_string = bytes.iter().map(|b| format!("{:02x}", b)).collect::<String>();
-    hex_string
+thread_local! {
+    static DB: Rc<RefCell<Connection>> = RefCell::new(Connection::open(DB_PATH).unwrap()).into();
+}
+
+/// Wrapper around the built-in rusqlite db that allows PersistedWallet to be shared across multiple threads by
+/// lazily initializing per core connections to the sqlite db and keeping them in local thread storage instead of
+/// sharing the connection across cores
+struct Persister;
+
+impl WalletPersister for Persister {
+    type Error = rusqlite::Error;
+
+    fn initialize(_persister: &mut Self) -> Result<bdk_wallet::ChangeSet, Self::Error> {
+        let db = Self::db();
+        let mut db_ref = db.borrow_mut();
+        let db_tx = db_ref.transaction()?;
+        ChangeSet::init_sqlite_tables(&db_tx)?;
+        let changeset = ChangeSet::from_sqlite(&db_tx)?;
+        db_tx.commit()?;
+        Ok(changeset)
+    }
+
+    fn persist(_persister: &mut Self, changeset: &bdk_wallet::ChangeSet) -> Result<(), Self::Error> {
+        let db = Self::db();
+        let mut db_ref = db.borrow_mut();
+        let db_tx = db_ref.transaction()?;
+        changeset.persist_to_sqlite(&db_tx)?;
+        db_tx.commit()
+    }
+}
+
+impl Persister {
+    fn db() -> Rc<RefCell<Connection>> {
+        DB.with(|db| db.clone())
+    }
 }
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt().init();
-    let mut conn = Connection::open(DB_PATH).unwrap();
 
-    let seed: [u8; 32] = thread_rng().gen();
+    let (seed, loaded_seed) = match SavableSeed::read() {
+        Ok(Some(SavableSeed { seed, .. })) => {
+            let mut buf = [0u8; 32];
+            if let Err(e) = decode(&seed, &mut buf) {
+                panic!("seed failed to decode: {e:?}")
+            }
+            (buf, true)
+        }
+        _ => (thread_rng().gen(), false),
+    };
+
     let rootpriv = Xpriv::new_master(Network::Signet, &seed).expect("valid xpriv");
     let purpose = ChildNumber::from_hardened_idx(86).unwrap();
     let coin_type = ChildNumber::from_hardened_idx(0).unwrap();
     let account = ChildNumber::from_hardened_idx(0).unwrap();
-    let descriptor = format!("tr({}/{}/{}/{}",
-        rootpriv,
-        purpose,
-        coin_type,
-        account
-    );
+    let base_desc = format!("tr({}/{}/{}/{}", rootpriv, purpose, coin_type, account);
 
-    let savable = Seed {
-        seed: bytes_to_hex(&seed),
-        l1_descriptor: format!("{descriptor})")
-    };
+    if !loaded_seed {
+        SavableSeed {
+            seed: encode(&seed),
+            l1_descriptor: format!("{base_desc})"),
+        }
+        .save()
+        .expect("should be able to save");
+    }
 
-    let external_desc = format!("{descriptor}/0)");
-    let internal_desc = format!("{descriptor}/1)");
+    let external_desc = format!("{base_desc}/0)");
+    let internal_desc = format!("{base_desc}/1)");
 
-    savable.save().expect("should be able to save");
+    let mut l1_wallet = Wallet::load()
+        .descriptor(KeychainKind::External, Some(external_desc.clone()))
+        .descriptor(KeychainKind::Internal, Some(internal_desc.clone()))
+        .extract_keys()
+        .check_network(NETWORK)
+        .load_wallet(&mut Persister)
+        .unwrap()
+        .unwrap_or_else(|| {
+            Wallet::create(external_desc, internal_desc)
+                .network(NETWORK)
+                .create_wallet(&mut Persister)
+                .expect("wallet creation to succeed")
+        });
 
-    let wallet_opt = Wallet::load()
-            .descriptor(KeychainKind::External, Some(external_desc))
-            .descriptor(KeychainKind::Internal, Some(internal_desc))
-            .extract_keys()
-            .check_network(NETWORK)
-            .load_wallet(&mut conn);
+    let address = l1_wallet.next_unused_address(KeychainKind::External);
+    dbg!(address);
 
-
-
-    // let descriptor = descriptor!(
-    //     tr(kp.public_key())
-    // );
-    // build our application with a single route
-    let app = Router::new().route("/", get(|| async { "Hello, World!" }));
+    let app = Router::new().route("/", get(|| async { "Hello, World!" }))
+        .with_state(Arc::new(l1_wallet));
 
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
@@ -102,7 +155,7 @@ impl Challenge {
     pub fn get(ip: &Ipv4Addr, eviction_q: &EvictionQueue) -> Self {
         let nonce = thread_rng().gen();
         let expires_at = Instant::now() + TTL;
-        match nonce_set().cas(ip.to_bits(), None::<&[u8]>, Some(nonce)) {
+        match nonce_set().cas(ip.to_bits(), None, Some((nonce, false))) {
             Ok(None) => {
                 let nonce = Self { nonce, expires_at };
                 eviction_q.add_nonce(&nonce, *ip);
@@ -114,7 +167,7 @@ impl Challenge {
             Err(CasFailure { actual, .. }) => Self {
                 // safety: safe to unwrap actual as if it were None
                 // we would've got an Ok
-                nonce: actual.unwrap(),
+                nonce: actual.unwrap().0,
                 expires_at,
             },
         }
@@ -131,21 +184,25 @@ pub struct ProofOfWorkChallenge {
 pub struct NonceDoesNotExist;
 
 impl ProofOfWorkChallenge {
-    pub fn new(target_prefixed_zeros: u8, nonce: Nonce, ip: Ipv4Addr) -> Result<Self, NonceDoesNotExist> {
+    pub fn new(
+        target_prefixed_zeros: u8,
+        nonce: Nonce,
+        ip: Ipv4Addr,
+    ) -> Result<Self, NonceDoesNotExist> {
         match nonce_set().contains_key(&ip.to_bits()) {
             true => Ok(Self {
                 target_prefixed_zeros,
                 nonce,
-                ip
+                ip,
             }),
-            false => Err(NonceDoesNotExist)
+            false => Err(NonceDoesNotExist),
         }
     }
 
     /// Validates the proof of work solution by the client.
     /// Can only be called once per (IP,nonce) combination
     pub fn validate(&self, solution: u64) -> bool {
-        nonce_set().remove(&self.ip.to_bits());
+        // nonce_set().remove(&self.ip.to_bits());
         let mut hasher = Sha256::new();
         hasher.update(b"alpen labs faucet 2024");
         hasher.update(self.nonce);
@@ -159,7 +216,7 @@ pub type Nonce = [u8; 16];
 /// has a nonce present. IPs stored as u32 form for
 /// compatibility with concurrent map. IPs are big endian
 /// but these are notably using platform endianness.
-pub type NonceSet = ConcurrentMap<u32, Nonce>;
+pub type NonceSet = ConcurrentMap<u32, (Nonce, bool)>;
 
 /// A queue for evicting old challenges' nonces from the
 /// nonce set efficiently and automatically using a [`BinaryHeap`] priority queue
@@ -231,19 +288,22 @@ impl EvictionQueue {
     fn remove_expired_internal(&self, heap: HeapGuard) {
         if heap.is_empty() {
             return;
-        } else if heap.len() < 100 {
+        }
+
+        if heap.len() < 100 {
             let mut expired = ArrayVec::<_, 100>::new();
             // heap lock is auto dropped because moved into the heap
             pull_expired(heap, &mut expired, 100);
             delete_expired(&expired);
-        } else {
-            let mut expired = ArrayVec::<_, 1000>::new();
-            // heap lock is auto dropped because moved into the heap
-            let more_to_expire = pull_expired(heap, &mut expired, 1000);
-            delete_expired(&expired);
-            if more_to_expire {
-                return self.remove_expired();
-            }
+            return;
+        }
+
+        let mut expired = ArrayVec::<_, 1000>::new();
+        // heap lock is auto dropped because moved into the heap
+        let more_to_expire = pull_expired(heap, &mut expired, 1000);
+        delete_expired(&expired);
+        if more_to_expire {
+            return self.remove_expired();
         }
     }
 }
