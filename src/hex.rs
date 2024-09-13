@@ -4,8 +4,16 @@ use terrors::OneOf;
 pub fn encode(bytes: &[u8]) -> String {
     let mut hex_string = String::with_capacity(bytes.len() * 2);
     for b in bytes {
-        hex_string.push(HexChar::try_from(b >> 4).expect("value should be 0..=15").into());
-        hex_string.push(HexChar::try_from(b & 0b00001111).expect("value should be 0..=15").into());
+        hex_string.push(
+            HexChar::try_from(b >> 4)
+                .expect("value should be 0..=15")
+                .into(),
+        );
+        hex_string.push(
+            HexChar::try_from(b & 0b00001111)
+                .expect("value should be 0..=15")
+                .into(),
+        );
     }
     hex_string
 }
@@ -38,7 +46,7 @@ pub fn decode(
         let (c1, c2) = match (chars.next(), chars.next()) {
             (Some(c1), Some(c2)) => (c1, c2),
             (None, None) => break Ok(()),
-            _ => break err!(BadByte { byte: byte_count })
+            _ => break err!(BadByte { byte: byte_count }),
         };
 
         let (Ok(c1), Ok(c2)) = (HexChar::try_from(c1), HexChar::try_from(c2)) else {
@@ -74,7 +82,7 @@ pub struct UnevenHexCharacterCount;
 enum HexCharKind {
     Uppercase,
     Lowercase,
-    Number
+    Number,
 }
 
 impl TryFrom<&char> for HexCharKind {
@@ -85,7 +93,7 @@ impl TryFrom<&char> for HexCharKind {
             '0'..='9' => Self::Number,
             'a'..='f' => Self::Lowercase,
             'A'..='F' => Self::Uppercase,
-            _ => Err(())?
+            _ => Err(())?,
         })
     }
 }
@@ -97,7 +105,7 @@ impl TryFrom<&u8> for HexCharKind {
         Ok(match value {
             0..=9 => Self::Number,
             10..=15 => Self::Lowercase,
-            _ => Err(())?
+            _ => Err(())?,
         })
     }
 }
@@ -114,7 +122,7 @@ impl HexCharKind {
 
 struct HexChar {
     c: char,
-    kind: HexCharKind
+    kind: HexCharKind,
 }
 
 impl TryFrom<char> for HexChar {
@@ -123,7 +131,7 @@ impl TryFrom<char> for HexChar {
     fn try_from(value: char) -> Result<Self, Self::Error> {
         Ok(Self {
             kind: (&value).try_into()?,
-            c: value
+            c: value,
         })
     }
 }
