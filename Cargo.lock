@@ -864,9 +864,9 @@ dependencies = [
 
 [[package]]
 name = "bdk_wallet"
-version = "1.0.0-beta.2"
+version = "1.0.0-beta.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b38aa12ef660265f50802437496cb18bda14774683ab736ba7a7e584885a91c"
+checksum = "ab1f13b83fb1e3c4a8bdc20ca59e95c0e4167a4a8a085c179aadfae281bdfee0"
 dependencies = [
  "bdk_chain",
  "bitcoin",

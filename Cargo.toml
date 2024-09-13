@@ -8,7 +8,7 @@ alloy = { version = "0.3.3", default-features = false, features = ["std", "rpc-c
 arrayvec = "0.7.6"
 axum = { version = "0.7.5", features = ["http2"] }
 bdk_esplora = { version = "0.17.0", features = ["async-https", "async-https-rustls"], default-features = false }
-bdk_wallet = { version = "1.0.0-beta.2", features = ["rusqlite"] }
+bdk_wallet = { version = "1.0.0-beta.3", features = ["rusqlite"] }
 concurrent-map = "5.0.37"
 parking_lot = "0.12.3"
 rand = "0.8.5"
