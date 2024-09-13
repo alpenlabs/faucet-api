@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-alloy = { version = "0.3.3", default-features = false, features = ["std", "rpc-client-ws"] }
+alloy = { version = "0.3.5", default-features = false, features = ["std", "rpc-client-ws"] }
 arrayvec = "0.7.6"
 axum = { version = "0.7.5", features = ["http2"] }
 bdk_esplora = { version = "0.17.1", features = ["async-https", "async-https-rustls"], default-features = false }
