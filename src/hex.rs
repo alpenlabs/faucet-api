@@ -1,7 +1,56 @@
 //! A module for encoding and decoding hexadecimal strings.
 
+use std::ops::{Deref, DerefMut};
+
 use crate::err;
+use axum::{body::Body, http::Response, response::IntoResponse};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use terrors::OneOf;
+
+pub struct Hex<T: AsRef<[u8]>>(pub T);
+
+impl<T: AsRef<[u8]>> IntoResponse for Hex<T> {
+    fn into_response(self) -> axum::response::Response {
+        Response::builder()
+            .body(Body::from(encode(self.0.as_ref())))
+            .expect("valid response")
+    }
+}
+
+impl<T: AsRef<[u8]>> Serialize for Hex<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let hex_string = encode(self.0.as_ref());
+        serializer.serialize_str(&hex_string)
+    }
+}
+
+impl<'de> Deserialize<'de> for Hex<Vec<u8>> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let hex_string = String::deserialize(deserializer)?;
+        let bytes = decode_alloc(&hex_string).map_err(|e| de::Error::custom(format!("{e:?}")))?;
+        Ok(Hex(bytes))
+    }
+}
+
+impl<T: AsRef<[u8]>> Deref for Hex<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T: AsRef<[u8]>> DerefMut for Hex<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 pub fn encode(bytes: &[u8]) -> String {
     let mut hex_string = String::with_capacity(bytes.len() * 2);
