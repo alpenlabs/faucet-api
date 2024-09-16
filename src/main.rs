@@ -58,13 +58,11 @@ async fn main() {
     let (ip, port) = (
         env::var("HOST")
             .ok()
-            .map(|h| IpAddr::from_str(&h).ok())
-            .flatten()
+            .and_then(|h| IpAddr::from_str(&h).ok())
             .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
         env::var("PORT")
             .ok()
-            .map(|h| u16::from_str(&h).ok())
-            .flatten()
+            .and_then(|h| u16::from_str(&h).ok())
             .unwrap_or(3000),
     );
 
@@ -74,8 +72,7 @@ async fn main() {
 
     let ip_source = env::var("IP_SRC")
         .ok()
-        .map(|src| SecureClientIpSource::from_str(&src).ok())
-        .flatten()
+        .and_then(|src| SecureClientIpSource::from_str(&src).ok())
         .unwrap_or(SecureClientIpSource::ConnectInfo);
 
     let state = Arc::new(app_state);

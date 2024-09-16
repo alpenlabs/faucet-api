@@ -22,7 +22,7 @@ impl SavableSeed {
     fn read() -> io::Result<Option<Self>> {
         if Path::new(SEED_PATH).exists() {
             let bytes = read(SEED_PATH)?;
-            Ok(bytes.try_into().map(|s| Self(s)).ok())
+            Ok(bytes.try_into().map(Self).ok())
         } else {
             Ok(None)
         }
