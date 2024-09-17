@@ -11,3 +11,6 @@ enable-hooks:
     echo "#!/bin/sh\njust pre-commit" > .git/hooks/pre-commit
 
 pre-commit: fmt clippy t
+
+html-solver:
+    cargo r -p html-solver

@@ -110,8 +110,8 @@ async fn claim_l1(
     };
 
     // num hashes on average to solve challenge: 2^15
-    if !Challenge::valid(&ip, SETTINGS.pow_difficulty, solution.0) {
-        return Err((StatusCode::BAD_REQUEST, "Bad solution".to_string()));
+    if let Err(e) = Challenge::valid(&ip, SETTINGS.pow_difficulty, solution.0) {
+        return Err((StatusCode::BAD_REQUEST, format!("{e:?}")))
     }
 
     let address = address.require_network(SETTINGS.network).map_err(|_| {

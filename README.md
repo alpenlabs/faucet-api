@@ -38,6 +38,8 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
 }
 ```
 
+For those who are compiler challenged, there are 0-dependency JavaScript and Python implementations of solvers in the `utils` directory. You can easily run the JS solver in your browser by running `just html-solver` and then navigating to http://localhost:3001.
+
 Once you find a solution, hex encode it and use it in a claim for either L1 or L2 funds:
 
 ### L1

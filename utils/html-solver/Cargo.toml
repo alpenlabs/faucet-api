@@ -1,0 +1,8 @@
+[package]
+name = "html-solver"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+hyper = { version = "0.14", features = ["server", "http1", "tcp"] }

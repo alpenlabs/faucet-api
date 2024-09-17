@@ -3,6 +3,10 @@ name = "alpen-faucet"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+resolver = "2"
+members = [".", "utils/html-solver"]
+
 [dependencies]
 alloy = { version = "0.3.5", default-features = false, features = [
   "std",

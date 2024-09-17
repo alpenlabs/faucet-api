@@ -12,7 +12,10 @@ use concurrent_map::{CasFailure, ConcurrentMap};
 use parking_lot::{Mutex, MutexGuard};
 use rand::{thread_rng, Rng};
 use sha2::{Digest, Sha256};
+use terrors::OneOf;
 use tokio::time::sleep;
+
+use crate::err;
 
 pub struct Challenge {
     nonce: Nonce,
@@ -20,6 +23,13 @@ pub struct Challenge {
 }
 
 const TTL: Duration = Duration::from_secs(20);
+
+#[derive(Debug)]
+pub struct NonceNotFound;
+#[derive(Debug)]
+pub struct BadProofOfWork;
+#[derive(Debug)]
+pub struct AlreadyClaimed;
 
 impl Challenge {
     /// Retrieves a proof-of-work challenge for the given Ipv4 address.
@@ -48,12 +58,13 @@ impl Challenge {
     }
 
     /// Validates the proof of work solution by the client.
-    pub fn valid(ip: &Ipv4Addr, difficulty: u8, solution: Solution) -> bool {
+    pub fn valid(ip: &Ipv4Addr, difficulty: u8, solution: Solution) -> Result<(), OneOf<(NonceNotFound, BadProofOfWork, AlreadyClaimed)>> {
         let ns = nonce_set();
         let raw_ip = ip.to_bits();
         let nonce = match ns.get(&raw_ip) {
             Some((nonce, claimed)) if !claimed => nonce,
-            _ => return false,
+            Some(_) => return err!(AlreadyClaimed),
+            None => return err!(NonceNotFound),
         };
         let mut hasher = Sha256::new();
         hasher.update(b"alpen labs faucet 2024");
@@ -62,8 +73,9 @@ impl Challenge {
         let pow_valid = count_leading_zeros(&hasher.finalize()) >= difficulty;
         if pow_valid {
             ns.insert(raw_ip, (nonce, true));
+            return Ok(());
         }
-        pow_valid
+        err!(BadProofOfWork)
     }
 
     pub fn nonce(&self) -> [u8; 16] {
