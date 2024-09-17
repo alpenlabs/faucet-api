@@ -21,7 +21,21 @@ let salt = 0x616c70656e206c616273206661756365742032303234;
 // nonce is the 16 decoded bytes from the API
 // solution is a 8 byte array
 // `|` is representing concatenation
-count_leading_zeros(sha256(salt | nonce | solution)) >= difficulty
+return count_leading_zeros(sha256(salt | nonce | solution)) >= difficulty;
+
+fn count_leading_zeros(data: &[u8]) -> u8 {
+    let mut leading_zeros = 0;
+    for byte in data {
+        if *byte == 0 {
+            leading_zeros += 8;
+        } else {
+            leading_zeros += byte.leading_zeros() as u8;
+            break;
+        }
+    }
+
+    leading_zeros
+}
 ```
 
 Once you find a solution, hex encode it and use it in a claim for either L1 or L2 funds:
