@@ -13,4 +13,5 @@ enable-hooks:
 pre-commit: fmt clippy t
 
 html-solver:
-    cargo r -p html-solver
+    cd utils/html-solver && \
+    cargo r
