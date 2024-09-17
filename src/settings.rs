@@ -1,4 +1,8 @@
-use std::{net::{IpAddr, Ipv4Addr}, path::PathBuf, sync::LazyLock};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    path::PathBuf,
+    sync::LazyLock,
+};
 
 use axum_client_ip::SecureClientIpSource;
 use bdk_wallet::bitcoin::{Amount, Network};
@@ -11,7 +15,7 @@ pub static SETTINGS: LazyLock<Settings> = LazyLock::new(|| {
     let args = std::env::args().collect::<Vec<_>>();
 
     let settings_path = match (args.get(1), args.get(2)) {
-        (Some(a1), Some(a2)) if a1 == "--config" || a1 == "-c" => Some(PathBuf::try_from(a2).expect("failed to parse config path")),
+        (Some(a1), Some(a2)) if a1 == "--config" || a1 == "-c" => Some(PathBuf::from(a2)),
         _ => None,
     };
 

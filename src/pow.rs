@@ -58,7 +58,11 @@ impl Challenge {
     }
 
     /// Validates the proof of work solution by the client.
-    pub fn valid(ip: &Ipv4Addr, difficulty: u8, solution: Solution) -> Result<(), OneOf<(NonceNotFound, BadProofOfWork, AlreadyClaimed)>> {
+    pub fn valid(
+        ip: &Ipv4Addr,
+        difficulty: u8,
+        solution: Solution,
+    ) -> Result<(), OneOf<(NonceNotFound, BadProofOfWork, AlreadyClaimed)>> {
         let ns = nonce_set();
         let raw_ip = ip.to_bits();
         let nonce = match ns.get(&raw_ip) {
