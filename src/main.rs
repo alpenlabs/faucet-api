@@ -18,7 +18,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     routing::get,
-    Router,
+    Json, Router,
 };
 use axum_client_ip::SecureClientIp;
 use bdk_wallet::bitcoin::{address::NetworkUnchecked, Address};
@@ -26,6 +26,7 @@ use hex::Hex;
 use l1::{fee_rate, L1Wallet, ESPLORA_CLIENT};
 use parking_lot::{RwLock, RwLockWriteGuard};
 use pow::{Challenge, Nonce, Solution};
+use serde::{Deserialize, Serialize};
 use settings::{settings, Settings};
 use tokio::net::TcpListener;
 use tracing::{error, info};
@@ -80,11 +81,23 @@ async fn main() {
     .unwrap();
 }
 
-async fn get_pow_challenge(SecureClientIp(ip): SecureClientIp) -> Result<Hex<Nonce>, &'static str> {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PowChallenge {
+    nonce: Hex<Nonce>,
+    difficulty: u8,
+}
+
+async fn get_pow_challenge(
+    SecureClientIp(ip): SecureClientIp,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<PowChallenge>, (StatusCode, &'static str)> {
     if let IpAddr::V4(ip) = ip {
-        Ok(Hex(Challenge::get(&ip).nonce()))
+        Ok(Json(PowChallenge {
+            nonce: Hex(Challenge::get(&ip).nonce()),
+            difficulty: state.settings.pow_difficulty,
+        }))
     } else {
-        Err("IPV6 is not unavailable")
+        Err((StatusCode::SERVICE_UNAVAILABLE, "IPV6 is not unavailable"))
     }
 }
 
@@ -101,7 +114,7 @@ async fn claim_l1(
     };
 
     // num hashes on average to solve challenge: 2^15
-    if !Challenge::valid(&ip, 15, solution.0) {
+    if !Challenge::valid(&ip, state.settings.pow_difficulty, solution.0) {
         return Err((StatusCode::BAD_REQUEST, "Bad solution".to_string()));
     }
 

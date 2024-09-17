@@ -17,6 +17,7 @@ pub struct InternalSettings {
     pub network: Option<Network>,
     pub esplora: Option<String>,
     pub sats_per_claim: Option<Amount>,
+    pub pow_difficulty: Option<u8>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -31,6 +32,7 @@ pub struct Settings {
     pub network: Network,
     pub esplora: String,
     pub sats_per_claim: Amount,
+    pub pow_difficulty: u8,
 }
 
 impl From<InternalSettings> for Settings {
@@ -48,6 +50,7 @@ impl From<InternalSettings> for Settings {
             sats_per_claim: internal
                 .sats_per_claim
                 .unwrap_or(Amount::from_sat(10_000_000)),
+            pow_difficulty: internal.pow_difficulty.unwrap_or(17),
         }
     }
 }

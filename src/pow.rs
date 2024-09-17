@@ -48,7 +48,7 @@ impl Challenge {
     }
 
     /// Validates the proof of work solution by the client.
-    pub fn valid(ip: &Ipv4Addr, target_prefixed_zeros: u8, solution: Solution) -> bool {
+    pub fn valid(ip: &Ipv4Addr, difficulty: u8, solution: Solution) -> bool {
         let ns = nonce_set();
         let raw_ip = ip.to_bits();
         let nonce = match ns.get(&raw_ip) {
@@ -59,7 +59,7 @@ impl Challenge {
         hasher.update(b"alpen labs faucet 2024");
         hasher.update(nonce);
         hasher.update(solution);
-        let pow_valid = count_leading_zeros(&hasher.finalize()) >= target_prefixed_zeros;
+        let pow_valid = count_leading_zeros(&hasher.finalize()) >= difficulty;
         if pow_valid {
             ns.insert(raw_ip, (nonce, true));
         }

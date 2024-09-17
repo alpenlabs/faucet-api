@@ -1,6 +1,9 @@
 //! A module for encoding and decoding hexadecimal strings.
 
-use std::ops::{Deref, DerefMut};
+use std::{
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+};
 
 use axum::{body::Body, http::Response, response::IntoResponse};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
@@ -48,6 +51,12 @@ impl<'de, const N: usize> Deserialize<'de> for Hex<[u8; N]> {
         let mut buf = [0; N];
         decode(&hex_string, &mut buf).map_err(|e| de::Error::custom(format!("{e:?}")))?;
         Ok(Hex(buf))
+    }
+}
+
+impl<T: AsRef<[u8]>> std::fmt::Debug for Hex<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&encode(self.0.as_ref()))
     }
 }
 
