@@ -29,7 +29,7 @@ use colored::Colorize;
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
-use crate::{seed::SavableSeed, settings::settings, AppState};
+use crate::{seed::SavableSeed, AppState, SETTINGS};
 
 /// Live updating fee rate in sat/kwu
 static FEE_RATE: AtomicU64 = AtomicU64::new(250);
@@ -68,7 +68,7 @@ pub fn fee_rate() -> FeeRate {
 
 /// Shared async client for esplora
 pub static ESPLORA_CLIENT: LazyLock<AsyncClient> = LazyLock::new(|| {
-    esplora_client::Builder::new(&settings().esplora)
+    esplora_client::Builder::new(&SETTINGS.esplora)
         .build_async()
         .expect("valid esplora config")
 });

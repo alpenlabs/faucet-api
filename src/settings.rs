@@ -1,4 +1,4 @@
-use std::net::{IpAddr, Ipv4Addr};
+use std::{net::{IpAddr, Ipv4Addr}, path::PathBuf, sync::LazyLock};
 
 use axum_client_ip::SecureClientIpSource;
 use bdk_wallet::bitcoin::{Amount, Network};
@@ -6,6 +6,30 @@ use config::Config;
 use serde::{Deserialize, Serialize};
 
 use crate::CRATE_NAME;
+
+pub static SETTINGS: LazyLock<Settings> = LazyLock::new(|| {
+    let args = std::env::args().collect::<Vec<_>>();
+
+    let settings_path = match (args.get(1), args.get(2)) {
+        (Some(a1), Some(a2)) if a1 == "--config" || a1 == "-c" => Some(PathBuf::try_from(a2).expect("failed to parse config path")),
+        _ => None,
+    };
+
+    let mut builder = Config::builder();
+    if let Some(path) = settings_path {
+        builder = builder.add_source(config::File::from(path));
+    } else {
+        builder = builder.add_source(config::File::with_name("faucet.toml"))
+    }
+    builder
+        // Add in settings from the environment (with a prefix of CRATE_NAME)
+        .add_source(config::Environment::with_prefix(&CRATE_NAME.to_uppercase()))
+        .build()
+        .expect("a valid config")
+        .try_deserialize::<InternalSettings>()
+        .expect("a valid config")
+        .into()
+});
 
 #[derive(Serialize, Deserialize)]
 pub struct InternalSettings {
@@ -53,16 +77,4 @@ impl From<InternalSettings> for Settings {
             pow_difficulty: internal.pow_difficulty.unwrap_or(17),
         }
     }
-}
-
-pub fn settings() -> Settings {
-    Config::builder()
-        .add_source(config::File::with_name("faucet.toml"))
-        // Add in settings from the environment (with a prefix of CRATE_NAME)
-        .add_source(config::Environment::with_prefix(&CRATE_NAME.to_uppercase()))
-        .build()
-        .expect("a valid config")
-        .try_deserialize::<InternalSettings>()
-        .expect("a valid config")
-        .into()
 }
