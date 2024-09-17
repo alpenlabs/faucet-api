@@ -6,8 +6,8 @@ First, call `GET /get_pow_challenge` which will return something like this:
 
 ```json
 {
-  nonce: "<16 byte hex string>",
-  difficulty: <0 to 255>
+  "nonce": "<16 byte hex string>",
+  "difficulty": <0 to 255>
 }
 ```
 
