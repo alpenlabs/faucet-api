@@ -2,10 +2,11 @@
 
 use std::ops::{Deref, DerefMut};
 
-use crate::err;
 use axum::{body::Body, http::Response, response::IntoResponse};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use terrors::OneOf;
+
+use crate::err;
 
 pub struct Hex<T: AsRef<[u8]>>(pub T);
 
@@ -35,6 +36,18 @@ impl<'de> Deserialize<'de> for Hex<Vec<u8>> {
         let hex_string = String::deserialize(deserializer)?;
         let bytes = decode_alloc(&hex_string).map_err(|e| de::Error::custom(format!("{e:?}")))?;
         Ok(Hex(bytes))
+    }
+}
+
+impl<'de, const N: usize> Deserialize<'de> for Hex<[u8; N]> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let hex_string = String::deserialize(deserializer)?;
+        let mut buf = [0; N];
+        decode(&hex_string, &mut buf).map_err(|e| de::Error::custom(format!("{e:?}")))?;
+        Ok(Hex(buf))
     }
 }
 

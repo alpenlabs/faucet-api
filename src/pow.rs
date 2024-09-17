@@ -22,6 +22,10 @@ pub struct Challenge {
 const TTL: Duration = Duration::from_secs(20);
 
 impl Challenge {
+    /// Retrieves a proof-of-work challenge for the given Ipv4 address.
+    ///
+    /// Note that this doesn't support IPv6 yet because those IPs are a lot
+    /// easier to get.
     pub fn get(ip: &Ipv4Addr) -> Self {
         let nonce = thread_rng().gen();
         let expires_at = Instant::now() + TTL;
@@ -32,7 +36,7 @@ impl Challenge {
                 nonce
             }
             // Unreachable as this CAS will return a Some(..) only
-            // as a failure.
+            // in an Err.
             Ok(Some(_)) => unreachable!(),
             Err(CasFailure { actual, .. }) => Self {
                 // safety: safe to unwrap actual as if it were None
@@ -44,8 +48,7 @@ impl Challenge {
     }
 
     /// Validates the proof of work solution by the client.
-    /// Can only be called once per (IP,nonce) combination
-    pub fn valid(ip: &Ipv4Addr, target_prefixed_zeros: u8, solution: u64) -> bool {
+    pub fn valid(ip: &Ipv4Addr, target_prefixed_zeros: u8, solution: Solution) -> bool {
         let ns = nonce_set();
         let raw_ip = ip.to_bits();
         let nonce = match ns.get(&raw_ip) {
@@ -55,7 +58,7 @@ impl Challenge {
         let mut hasher = Sha256::new();
         hasher.update(b"alpen labs faucet 2024");
         hasher.update(nonce);
-        hasher.update(solution.to_le_bytes());
+        hasher.update(solution);
         let pow_valid = count_leading_zeros(&hasher.finalize()) >= target_prefixed_zeros;
         if pow_valid {
             ns.insert(raw_ip, (nonce, true));
@@ -68,6 +71,7 @@ impl Challenge {
     }
 }
 
+pub type Solution = [u8; 8];
 pub type Nonce = [u8; 16];
 /// IP set is used to check if an IPV4 address already
 /// has a nonce present. IPs stored as u32 form for
@@ -84,10 +88,12 @@ thread_local! {
         CELL.get_or_init(Default::default).lock()
             // clone and store a copy thread local
             .clone()
+        // release lock
     );
 }
 
-/// Helper function to retrieve the thread local instantiation of the [`NonceSet`]
+/// Helper function to retrieve the thread local instantiation of the
+/// [`NonceSet`]
 pub fn nonce_set() -> Rc<NonceSet> {
     NONCE_SET.with(|ns| ns.clone())
 }
@@ -128,25 +134,31 @@ impl EvictionQueue {
         EVICTION_Q.remove_expired_internal(q)
     }
 
-    /// Attempts to run the expiry routine. If not successful, it means that the routine is already running.
-    /// In this case, there's no need to block and redo as it will be handled by the currently executing instance.
+    /// Attempts to run the expiry routine. If not successful, it means that the
+    /// routine is already running. In this case, there's no need to block
+    /// and redo as it will be handled by the currently executing instance.
     fn remove_expired(&self) {
         if let Some(guard) = self.q.try_lock() {
             self.remove_expired_internal(guard);
         }
     }
 
-    /// Removes expired entries from the heap and deletes them from the nonce set.
-    /// This function is called internally by `remove_expired` and `add_nonce`. It handles two cases:
+    /// Removes expired entries from the heap and deletes them from the nonce
+    /// set. This function is called internally by `remove_expired` and
+    /// `add_nonce`. It handles two cases:
     ///
-    /// - When the heap has less than 100 items, it creates an `ArrayVec` of size 100 to store expired entries.
-    ///   It then pulls expired entries from the heap and adds them to the `ArrayVec`, up to a limit of 100.
-    /// - When the heap has 100 or more items, it creates an `ArrayVec` of size 1000 to store expired entries.
-    ///   It then pulls expired entries from the heap and adds them to the `ArrayVec`, up to a limit of 1000.
-    ///   If there are still more expired entries in the heap, it calls `remove_expired` recursively.
+    /// - When the heap has less than 100 items, it creates an `ArrayVec` of
+    ///   size 100 to store expired entries. It then pulls expired entries from
+    ///   the heap and adds them to the `ArrayVec`, up to a limit of 100.
+    /// - When the heap has 100 or more items, it creates an `ArrayVec` of size
+    ///   1000 to store expired entries. It then pulls expired entries from the
+    ///   heap and adds them to the `ArrayVec`, up to a limit of 1000. If there
+    ///   are still more expired entries in the heap, it calls `remove_expired`
+    ///   recursively.
     ///
-    /// Finally, it deletes the expired entries from the nonce set using the `delete_expired` function.
-    /// This means the function does not heap allocate and it doesn't hold the lock while it's deleting
+    /// Finally, it deletes the expired entries from the nonce set using the
+    /// `delete_expired` function. This means the function does not heap
+    /// allocate and it doesn't hold the lock while it's deleting
     /// pulled, expired items.
     fn remove_expired_internal(&self, heap: HeapGuard) {
         if heap.is_empty() {
@@ -180,8 +192,8 @@ fn delete_expired(to_expire: &[u32]) {
 
 type HeapGuard<'a> = MutexGuard<'a, VecDeque<EvictionEntry>>;
 
-/// Pulls expired entries from the eviction's queue and pushes their raw IPs onto
-/// a generic [`Extend`]able list
+/// Pulls expired entries from the eviction's queue and pushes their raw IPs
+/// onto a generic [`Extend`]able list
 fn pull_expired(mut from: HeapGuard, add_to: &mut impl Extend<u32>, limit: usize) -> bool {
     let now = Instant::now();
     let mut left = limit;

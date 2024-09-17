@@ -1,5 +1,5 @@
 [package]
-name = "faucet-api"
+name = "alpen-faucet"
 version = "0.1.0"
 edition = "2021"
 
@@ -19,6 +19,7 @@ bdk_esplora = { version = "0.18.0", features = [
 bdk_wallet = { version = "1.0.0-beta.4", features = ["rusqlite"] }
 colored = "2.1.0"
 concurrent-map = "5.0.37"
+config = { version = "0.14.0", features = ["toml"], default-features = false }
 parking_lot = "0.12.3"
 rand = "0.8.5"
 serde = { version = "1.0.210", features = ["derive"] }
