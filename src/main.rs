@@ -3,6 +3,7 @@
 
 pub mod hex;
 pub mod l1;
+pub mod l2;
 pub mod macros;
 pub mod pow;
 pub mod seed;
@@ -14,6 +15,12 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
+use alloy::{
+    network::TransactionBuilder,
+    primitives::{Address as L2Address, U256},
+    providers::Provider,
+    rpc::types::TransactionRequest,
+};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -21,11 +28,13 @@ use axum::{
     Json, Router,
 };
 use axum_client_ip::SecureClientIp;
-use bdk_wallet::bitcoin::{address::NetworkUnchecked, Address};
+use bdk_wallet::bitcoin::{address::NetworkUnchecked, hashes::Hash, Address as L1Address};
 use hex::Hex;
 use l1::{fee_rate, L1Wallet, ESPLORA_CLIENT};
+use l2::L2Wallet;
 use parking_lot::{RwLock, RwLockWriteGuard};
 use pow::{Challenge, Nonce, Solution};
+use seed::SavableSeed;
 use serde::{Deserialize, Serialize};
 use settings::SETTINGS;
 use tokio::net::TcpListener;
@@ -34,6 +43,7 @@ use tracing_subscriber::EnvFilter;
 
 pub struct AppState {
     l1_wallet: RwLock<L1Wallet>,
+    l2_wallet: L2Wallet,
 }
 
 pub static CRATE_NAME: LazyLock<String> =
@@ -52,12 +62,16 @@ async fn main() {
 
     let (host, port) = (SETTINGS.host, SETTINGS.port);
 
-    let l1_wallet =
-        L1Wallet::load_or_create(SETTINGS.network).expect("l1 wallet creation to succeed");
+    let seed = SavableSeed::load_or_create().expect("seed load should work");
+
+    let l1_wallet = L1Wallet::new(SETTINGS.network, &seed).expect("l1 wallet creation to succeed");
     l1::spawn_fee_rate_task();
+
+    let l2_wallet = L2Wallet::new(&seed).expect("l2 wallet creation to succeed");
 
     let state = Arc::new(AppState {
         l1_wallet: l1_wallet.into(),
+        l2_wallet,
     });
 
     L1Wallet::spawn_syncer(state.clone());
@@ -65,6 +79,7 @@ async fn main() {
     let app = Router::new()
         .route("/pow_challenge", get(get_pow_challenge))
         .route("/claim_l1/:solution/:address", get(claim_l1))
+        .route("/claim_l2/:solution/:address", get(claim_l2))
         .layer(SETTINGS.ip_src.clone().into_extension())
         .with_state(state);
 
@@ -97,11 +112,13 @@ async fn get_pow_challenge(
     }
 }
 
+type Txid = [u8; 32];
+
 async fn claim_l1(
     SecureClientIp(ip): SecureClientIp,
-    Path((solution, address)): Path<(Hex<Solution>, Address<NetworkUnchecked>)>,
+    Path((solution, address)): Path<(Hex<Solution>, L1Address<NetworkUnchecked>)>,
     State(state): State<Arc<AppState>>,
-) -> Result<(), (StatusCode, String)> {
+) -> Result<Hex<Txid>, (StatusCode, String)> {
     let IpAddr::V4(ip) = ip else {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -160,7 +177,47 @@ async fn claim_l1(
         ));
     }
 
-    info!("l1 claim to {address} via tx {}", tx.compute_txid());
+    let txid = tx.compute_txid();
 
-    Ok(())
+    info!("l1 claim to {address} via tx {}", txid);
+
+    Ok(Hex(txid.to_raw_hash().to_byte_array()))
+}
+
+async fn claim_l2(
+    SecureClientIp(ip): SecureClientIp,
+    Path((solution, address)): Path<(Hex<Solution>, L2Address)>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Hex<Txid>, (StatusCode, String)> {
+    let IpAddr::V4(ip) = ip else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "IPV6 is not unavailable".to_string(),
+        ));
+    };
+
+    // num hashes on average to solve challenge: 2^15
+    if let Err(e) = Challenge::valid(&ip, SETTINGS.pow_difficulty, solution.0) {
+        return Err((StatusCode::BAD_REQUEST, format!("{e:?}")));
+    }
+
+    let tx = TransactionRequest::default()
+        .with_to(address)
+        // 1 btc == 1 "eth" => 1 sat = 1e10 "wei"
+        .with_value(U256::from(SETTINGS.sats_per_claim.to_sat() * 10u64.pow(10)));
+
+    let txid = match state.l2_wallet.send_transaction(tx).await {
+        Ok(r) => *r.tx_hash(),
+        Err(e) => {
+            error!("error sending transaction: {e:?}");
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "error sending tx".to_owned(),
+            ));
+        }
+    };
+
+    info!("l2 claim to {address} via tx {}", txid);
+
+    Ok(Hex(txid.0))
 }

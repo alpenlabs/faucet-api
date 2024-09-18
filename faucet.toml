@@ -5,5 +5,6 @@ seed_file = "faucet.seed"
 sqlite_file = "faucet.sqlite"
 network = "signet"
 esplora = "https://explorer.bc-2.jp/api"
+l2_http_endpoint = "https://ethereum-rpc.publicnode.com"
 sats_per_claim = 10_000_000
 pow_difficulty = 17

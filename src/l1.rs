@@ -16,20 +16,14 @@ use bdk_esplora::{
     EsploraAsyncExt,
 };
 use bdk_wallet::{
-    bitcoin::{
-        bip32::{Xpriv, Xpub},
-        key::Secp256k1,
-        FeeRate, Network,
-    },
-    descriptor::calc_checksum,
+    bitcoin::{bip32::Xpriv, FeeRate, Network},
     rusqlite::{self, Connection},
     ChangeSet, KeychainKind, PersistedWallet, Wallet, WalletPersister,
 };
-use colored::Colorize;
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
-use crate::{seed::SavableSeed, AppState, SETTINGS};
+use crate::{seed::Seed, AppState, SETTINGS};
 
 /// Live updating fee rate in sat/kwu
 static FEE_RATE: AtomicU64 = AtomicU64::new(250);
@@ -122,26 +116,13 @@ impl WalletPersister for Persister {
 pub struct L1Wallet(PersistedWallet<Persister>);
 
 impl L1Wallet {
-    /// Load or create a wallet from the disk using the seed file and sqlite
-    /// database.
-    pub fn load_or_create(network: Network) -> io::Result<Self> {
-        let seed = SavableSeed::load_or_create()?;
-        let rootpriv = Xpriv::new_master(Network::Signet, &seed).expect("valid xpriv");
-        let rootpub = Xpub::from_priv(&Secp256k1::new(), &rootpriv);
+    /// Create a wallet using the seed file and sqlite database.
+    pub fn new(network: Network, seed: &Seed) -> io::Result<Self> {
+        let rootpriv = Xpriv::new_master(Network::Signet, seed).expect("valid xpriv");
+        // let rootpub = Xpub::from_priv(&Secp256k1::new(), &rootpriv);
         let base_desc = format!("tr({}/86h/0h/0h", rootpriv);
-        let base_pub_desc = format!("tr({}/86h/0h/0h)", rootpub);
-        info!(
-            "public descriptor: {}",
-            format!(
-                "{}#{}",
-                base_pub_desc,
-                calc_checksum(&base_pub_desc).expect("valid descriptor")
-            )
-            .green()
-        );
-
-        let external_desc = format!("{base_desc}/0)");
-        let internal_desc = format!("{base_desc}/1)");
+        let external_desc = format!("{base_desc}/0/*)");
+        let internal_desc = format!("{base_desc}/1/*)");
 
         Ok(Self(
             Wallet::load()

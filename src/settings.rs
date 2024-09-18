@@ -43,7 +43,8 @@ pub struct InternalSettings {
     pub seed_file: Option<String>,
     pub sqlite_file: Option<String>,
     pub network: Option<Network>,
-    pub esplora: Option<String>,
+    pub esplora: String,
+    pub l2_http_endpoint: String,
     pub sats_per_claim: Option<Amount>,
     pub pow_difficulty: Option<u8>,
 }
@@ -59,12 +60,24 @@ pub struct Settings {
     pub sqlite_file: String,
     pub network: Network,
     pub esplora: String,
+    pub l2_http_endpoint: String,
     pub sats_per_claim: Amount,
     pub pow_difficulty: u8,
 }
 
+// on L2, we represent 1 btc as 1 "eth" on the rollup
+// that means 1 sat = 1e10 "wei"
+// we have to store the amount we send in wei as a u64,
+// so this is a safety check.
+const MAX_SATS_PER_CLAIM: u64 = u64::MAX / 10u64.pow(10);
+
 impl From<InternalSettings> for Settings {
     fn from(internal: InternalSettings) -> Self {
+        if let Some(spc) = internal.sats_per_claim {
+            if spc.to_sat() > MAX_SATS_PER_CLAIM {
+                panic!("sats per claim is too high, max is {MAX_SATS_PER_CLAIM}");
+            }
+        }
         Self {
             host: internal.host.unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
             port: internal.port.unwrap_or(3000),
@@ -72,9 +85,8 @@ impl From<InternalSettings> for Settings {
             seed_file: internal.seed_file.unwrap_or("faucet.seed".to_owned()),
             sqlite_file: internal.sqlite_file.unwrap_or("faucet.sqlite".to_owned()),
             network: internal.network.unwrap_or(Network::Signet),
-            esplora: internal
-                .esplora
-                .unwrap_or("https://explorer.bc-2.jp/api".to_owned()),
+            esplora: internal.esplora,
+            l2_http_endpoint: internal.l2_http_endpoint,
             sats_per_claim: internal
                 .sats_per_claim
                 .unwrap_or(Amount::from_sat(10_000_000)),

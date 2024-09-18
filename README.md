@@ -48,9 +48,14 @@ Once you find a solution, hex encode it and use it in a claim for either L1 or L
 
 Where `l1_address` is the address that you want to receive funds on.
 
-If successful, this will return a `200 OK` with an empty body.
+If successful, this will return a `200 OK` with the hex-encoded txid in the body.
 If not, it will return a status code and a raw error message string in the body.
 
 ### L2
 
-`todo`
+`GET /claim_l2/<solution_as_hex>/<l2_address>`
+
+Where `l2_address` is the address that you want to receive funds on.
+
+If successful, this will return a `200 OK` with the hex-encoded txid in the body.
+If not, it will return a status code and a raw error message string in the body.
