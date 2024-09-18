@@ -2,7 +2,7 @@ t:
     cargo t
 
 fmt:
-    rustfmt +nightly **/*.rs
+    cargo +nightly fmt --all
 
 clippy:
     cargo clippy --all-features -- -D warnings

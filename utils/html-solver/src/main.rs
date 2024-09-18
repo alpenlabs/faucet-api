@@ -1,8 +1,9 @@
+use std::{convert::Infallible, fs, net::SocketAddr, path::Path};
+
 use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server, StatusCode,
 };
-use std::{convert::Infallible, fs, net::SocketAddr, path::Path};
 
 async fn serve_file(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     let path = match req.uri().path() {
@@ -36,9 +37,7 @@ async fn serve_file(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 async fn main() {
     let addr = SocketAddr::from(([127, 0, 0, 1], 3001));
 
-    let make_svc = make_service_fn(|_conn| {
-        async { Ok::<_, Infallible>(service_fn(serve_file)) }
-    });
+    let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(serve_file)) });
 
     let server = Server::bind(&addr).serve(make_svc);
 
