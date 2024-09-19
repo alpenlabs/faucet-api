@@ -45,8 +45,8 @@ pub struct InternalSettings {
     pub network: Option<Network>,
     pub esplora: String,
     pub l2_http_endpoint: String,
-    pub sats_per_claim: Option<Amount>,
-    pub pow_difficulty: Option<u8>,
+    pub sats_per_claim: Amount,
+    pub pow_difficulty: u8,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -69,14 +69,12 @@ pub struct Settings {
 // that means 1 sat = 1e10 "wei"
 // we have to store the amount we send in wei as a u64,
 // so this is a safety check.
-const MAX_SATS_PER_CLAIM: u64 = u64::MAX / 10u64.pow(10);
+const MAX_SATS_PER_CLAIM: Amount = Amount::from_sat(u64::MAX / 10u64.pow(10));
 
 impl From<InternalSettings> for Settings {
     fn from(internal: InternalSettings) -> Self {
-        if let Some(spc) = internal.sats_per_claim {
-            if spc.to_sat() > MAX_SATS_PER_CLAIM {
-                panic!("sats per claim is too high, max is {MAX_SATS_PER_CLAIM}");
-            }
+        if internal.sats_per_claim > MAX_SATS_PER_CLAIM {
+            panic!("sats per claim is too high, max is {MAX_SATS_PER_CLAIM}");
         }
         Self {
             host: internal.host.unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
@@ -87,10 +85,8 @@ impl From<InternalSettings> for Settings {
             network: internal.network.unwrap_or(Network::Signet),
             esplora: internal.esplora,
             l2_http_endpoint: internal.l2_http_endpoint,
-            sats_per_claim: internal
-                .sats_per_claim
-                .unwrap_or(Amount::from_sat(10_000_000)),
-            pow_difficulty: internal.pow_difficulty.unwrap_or(17),
+            sats_per_claim: internal.sats_per_claim,
+            pow_difficulty: internal.pow_difficulty,
         }
     }
 }
