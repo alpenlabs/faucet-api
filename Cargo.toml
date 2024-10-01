@@ -12,7 +12,7 @@ alloy = { version = "0.3.5", features = ["std", "rpc-client-ws", "network", "sig
 arrayvec = "0.7.6"
 axum = { version = "0.7.5", features = ["http2"] }
 axum-client-ip = "0.6.0"
-axum-macros = "0.4.1"
+axum-macros = "0.4.2"
 bdk_esplora = { version = "0.18.0", features = [
   "async-https",
   "async-https-rustls",
