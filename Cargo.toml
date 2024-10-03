@@ -8,7 +8,15 @@ resolver = "2"
 members = [".", "utils/html-solver"]
 
 [dependencies]
-alloy = { version = "0.3.5", features = ["std", "rpc-client-ws", "network", "signers", "signer-local", "providers", "rpc-types"] }
+alloy = { version = "0.3.5", features = [
+  "std",
+  "rpc-client-ws",
+  "network",
+  "signers",
+  "signer-local",
+  "providers",
+  "rpc-types",
+] }
 arrayvec = "0.7.6"
 axum = { version = "0.7.7", features = ["http2"] }
 axum-client-ip = "0.6.0"
@@ -35,4 +43,14 @@ tokio = { version = "1.40.0", features = [
   "time",
 ] }
 tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "parking_lot"] }
+tracing-subscriber = { version = "0.3.18", features = [
+  "env-filter",
+  "parking_lot",
+] }
+
+[profile.release]
+opt-level = 3     # Optimized for speed, use z for size
+lto = true        # Enable Link Time Optimization
+codegen-units = 1 # Reduced to increase optimizations
+panic = "abort"   # Abort on panic
+strip = "symbols" # Strip symbols from binary
