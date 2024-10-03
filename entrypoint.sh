@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Default values for environment variables
-HOST="${HOST:-127.0.0.1}"
+HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-3000}"
 IP_SRC="${IP_SRC:-ConnectInfo}"
 SEED_FILE="${SEED_FILE:-faucet.seed}"

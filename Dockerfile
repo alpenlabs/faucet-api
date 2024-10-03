@@ -49,6 +49,6 @@ COPY ./entrypoint.sh entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # ENV PORT=${PORT:-3000}
-EXPOSE $PORT
+EXPOSE 3000
 
 ENTRYPOINT ["/app/entrypoint.sh"]
