@@ -47,7 +47,7 @@ pub fn spawn_fee_rate_task() {
                         info!("updated fee rate from {prev} to {new} sat/kwu")
                     }
                 }
-                Ok(None) => error!("failed to fetch latest fee rates"),
+                Ok(None) => error!("failed to fetch latest fee rates - got none back"),
                 Err(e) => error!("failed to fetch latest fee rates: {e:?}"),
             }
             sleep(Duration::from_secs(20)).await;
@@ -74,10 +74,8 @@ pub static ESPLORA_CLIENT: LazyLock<AsyncClient> = LazyLock::new(|| {
 #[derive(Debug)]
 pub struct Persister;
 
-const DB_PATH: &str = "faucet.sqlite";
-
 thread_local! {
-    static DB: Rc<RefCell<Connection>> = RefCell::new(Connection::open(DB_PATH).unwrap()).into();
+    static DB: Rc<RefCell<Connection>> = RefCell::new(Connection::open(&SETTINGS.sqlite_file).unwrap()).into();
 }
 
 impl Persister {

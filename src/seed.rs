@@ -7,21 +7,21 @@ use std::{
 use rand::{thread_rng, Rng};
 use tracing::info;
 
-const SEED_PATH: &str = "faucet.seed";
+use crate::settings::SETTINGS;
 
 pub type Seed = [u8; 32];
 pub struct SavableSeed(Seed);
 
 impl SavableSeed {
     fn save(&self) -> io::Result<()> {
-        write(SEED_PATH, self.0)?;
+        write(&SETTINGS.seed_file, self.0)?;
         info!("seed saved");
         Ok(())
     }
 
     fn read() -> io::Result<Option<Self>> {
-        if Path::new(SEED_PATH).exists() {
-            let bytes = read(SEED_PATH)?;
+        if Path::new(&SETTINGS.seed_file).exists() {
+            let bytes = read(&SETTINGS.seed_file)?;
             Ok(bytes.try_into().map(Self).ok())
         } else {
             Ok(None)

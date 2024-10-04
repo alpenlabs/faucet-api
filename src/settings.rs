@@ -1,6 +1,7 @@
 use std::{
     net::{IpAddr, Ipv4Addr},
     path::PathBuf,
+    str::FromStr,
     sync::LazyLock,
 };
 
@@ -32,7 +33,8 @@ pub static SETTINGS: LazyLock<Settings> = LazyLock::new(|| {
         .expect("a valid config")
         .try_deserialize::<InternalSettings>()
         .expect("a valid config")
-        .into()
+        .try_into()
+        .expect("invalid config")
 });
 
 #[derive(Serialize, Deserialize)]
@@ -56,8 +58,8 @@ pub struct Settings {
     pub host: IpAddr,
     pub port: u16,
     pub ip_src: SecureClientIpSource,
-    pub seed_file: String,
-    pub sqlite_file: String,
+    pub seed_file: PathBuf,
+    pub sqlite_file: PathBuf,
     pub network: Network,
     pub esplora: String,
     pub l2_http_endpoint: String,
@@ -71,22 +73,26 @@ pub struct Settings {
 // so this is a safety check.
 const MAX_SATS_PER_CLAIM: Amount = Amount::from_sat(u64::MAX / 10u64.pow(10));
 
-impl From<InternalSettings> for Settings {
-    fn from(internal: InternalSettings) -> Self {
+impl TryFrom<InternalSettings> for Settings {
+    type Error = <PathBuf as FromStr>::Err;
+
+    fn try_from(internal: InternalSettings) -> Result<Self, Self::Error> {
         if internal.sats_per_claim > MAX_SATS_PER_CLAIM {
             panic!("sats per claim is too high, max is {MAX_SATS_PER_CLAIM}");
         }
-        Self {
+        Ok(Self {
             host: internal.host.unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
             port: internal.port.unwrap_or(3000),
             ip_src: internal.ip_src,
-            seed_file: internal.seed_file.unwrap_or("faucet.seed".to_owned()),
-            sqlite_file: internal.sqlite_file.unwrap_or("faucet.sqlite".to_owned()),
+            seed_file: PathBuf::from_str(&internal.seed_file.unwrap_or("faucet.seed".to_owned()))?,
+            sqlite_file: PathBuf::from_str(
+                &internal.sqlite_file.unwrap_or("faucet.sqlite".to_owned()),
+            )?,
             network: internal.network.unwrap_or(Network::Signet),
             esplora: internal.esplora,
             l2_http_endpoint: internal.l2_http_endpoint,
             sats_per_claim: internal.sats_per_claim,
             pow_difficulty: internal.pow_difficulty,
-        }
+        })
     }
 }
