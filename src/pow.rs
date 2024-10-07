@@ -71,7 +71,7 @@ impl Challenge {
             None => return err!(NonceNotFound),
         };
         let mut hasher = Sha256::new();
-        hasher.update(b"alpen labs faucet 2024");
+        hasher.update(b"strata faucet 2024");
         hasher.update(nonce);
         hasher.update(solution);
         let pow_valid = count_leading_zeros(&hasher.finalize()) >= difficulty;
