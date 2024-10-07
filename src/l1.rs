@@ -43,6 +43,7 @@ pub fn spawn_fee_rate_task() {
                 .map(|frs| frs.get(&1).cloned())
             {
                 Ok(Some(fr)) => {
+                    // convert sat/vbyte to sat/kwu
                     let Some(new) = (fr as u64).checked_mul(1000 / 4) else {
                         warn!("got bad fee rate from esplora: {fr}");
                         return;
