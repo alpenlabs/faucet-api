@@ -28,9 +28,12 @@ use axum::{
     Json, Router,
 };
 use axum_client_ip::SecureClientIp;
-use bdk_wallet::bitcoin::{address::NetworkUnchecked, hashes::Hash, Address as L1Address};
+use bdk_wallet::{
+    bitcoin::{address::NetworkUnchecked, hashes::Hash, Address as L1Address},
+    KeychainKind,
+};
 use hex::Hex;
-use l1::{fee_rate, L1Wallet, ESPLORA_CLIENT};
+use l1::{fee_rate, L1Wallet, Persister, ESPLORA_CLIENT};
 use l2::L2Wallet;
 use parking_lot::{RwLock, RwLockWriteGuard};
 use pow::{Challenge, Nonce, Solution};
@@ -64,7 +67,13 @@ async fn main() {
 
     let seed = SavableSeed::load_or_create().expect("seed load should work");
 
-    let l1_wallet = L1Wallet::new(SETTINGS.network, &seed).expect("l1 wallet creation to succeed");
+    let mut l1_wallet =
+        L1Wallet::new(SETTINGS.network, &seed).expect("l1 wallet creation to succeed");
+    let l1_address = l1_wallet.reveal_next_address(KeychainKind::External);
+    l1_wallet
+        .persist(&mut Persister)
+        .expect("successful persist");
+    info!("L1 address: {}", l1_address.address);
     l1::spawn_fee_rate_task();
 
     let l2_wallet = L2Wallet::new(&seed).expect("l2 wallet creation to succeed");

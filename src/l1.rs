@@ -16,12 +16,7 @@ use bdk_esplora::{
     EsploraAsyncExt,
 };
 use bdk_wallet::{
-    bitcoin::{
-        bip32::{Xpriv, Xpub},
-        key::Secp256k1,
-        FeeRate, Network,
-    },
-    miniscript::descriptor::checksum::desc_checksum,
+    bitcoin::{bip32::Xpriv, FeeRate, Network},
     rusqlite::{self, Connection},
     ChangeSet, KeychainKind, PersistedWallet, Wallet, WalletPersister,
 };
@@ -123,14 +118,7 @@ impl L1Wallet {
     /// Create a wallet using the seed file and sqlite database.
     pub fn new(network: Network, seed: &Seed) -> io::Result<Self> {
         let rootpriv = Xpriv::new_master(Network::Signet, seed).expect("valid xpriv");
-        let rootpub = Xpub::from_priv(&Secp256k1::new(), &rootpriv);
         let base_desc = format!("tr({}/86h/0h/0h", rootpriv);
-        let pub_desc = format!("tr({}/86h/0h/0h/0/*)", rootpub);
-
-        info!(
-            "L1 descriptor: {pub_desc}#{}",
-            desc_checksum(&pub_desc).expect("valid desc")
-        );
         let external_desc = format!("{base_desc}/0/*)");
         let internal_desc = format!("{base_desc}/1/*)");
 
