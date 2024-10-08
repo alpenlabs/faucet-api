@@ -121,13 +121,11 @@ async fn get_pow_challenge(
     }
 }
 
-type Txid = [u8; 32];
-
 async fn claim_l1(
     SecureClientIp(ip): SecureClientIp,
     Path((solution, address)): Path<(Hex<Solution>, L1Address<NetworkUnchecked>)>,
     State(state): State<Arc<AppState>>,
-) -> Result<Hex<Txid>, (StatusCode, String)> {
+) -> Result<String, (StatusCode, String)> {
     let IpAddr::V4(ip) = ip else {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -190,14 +188,14 @@ async fn claim_l1(
 
     info!("l1 claim to {address} via tx {}", txid);
 
-    Ok(Hex(txid.to_raw_hash().to_byte_array()))
+    Ok(txid.to_string())
 }
 
 async fn claim_l2(
     SecureClientIp(ip): SecureClientIp,
     Path((solution, address)): Path<(Hex<Solution>, L2Address)>,
     State(state): State<Arc<AppState>>,
-) -> Result<Hex<Txid>, (StatusCode, String)> {
+) -> Result<String, (StatusCode, String)> {
     let IpAddr::V4(ip) = ip else {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -228,5 +226,5 @@ async fn claim_l2(
 
     info!("l2 claim to {address} via tx {}", txid);
 
-    Ok(Hex(txid.0))
+    Ok(txid.to_string())
 }
