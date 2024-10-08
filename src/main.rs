@@ -29,7 +29,7 @@ use axum::{
 };
 use axum_client_ip::SecureClientIp;
 use bdk_wallet::{
-    bitcoin::{address::NetworkUnchecked, hashes::Hash, Address as L1Address},
+    bitcoin::{address::NetworkUnchecked, Address as L1Address},
     KeychainKind,
 };
 use hex::Hex;
