@@ -59,3 +59,8 @@ Where `l2_address` is the address that you want to receive funds on.
 
 If successful, this will return a `200 OK` with the hex-encoded txid in the body.
 If not, it will return a status code and a raw error message string in the body.
+
+## License
+
+This work is dual-licensed under MIT and Apache 2.0.
+You can choose between one of them if you use this work.
