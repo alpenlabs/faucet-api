@@ -22,7 +22,7 @@ pub struct Challenge {
     expires_at: Instant,
 }
 
-const TTL: Duration = Duration::from_secs(20);
+const TTL: Duration = Duration::from_secs(60);
 
 #[derive(Debug)]
 pub struct NonceNotFound;
