@@ -157,7 +157,6 @@ async fn claim_l1(
         let mut psbt = l1w
             .build_tx()
             .fee_rate(fee_rate())
-            .enable_rbf()
             .add_recipient(address.script_pubkey(), SETTINGS.sats_per_claim)
             .clone()
             .finish()

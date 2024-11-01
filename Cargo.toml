@@ -21,11 +21,11 @@ arrayvec = "0.7.6"
 axum = { version = "0.7.7", features = ["http2"] }
 axum-client-ip = "0.6.0"
 axum-macros = "0.4.2"
-bdk_esplora = { version = "0.18.0", features = [
+bdk_esplora = { version = "0.19.0", features = [
   "async-https",
   "async-https-rustls",
 ], default-features = false }
-bdk_wallet = { version = "1.0.0-beta.4", features = ["rusqlite"] }
+bdk_wallet = { version = "1.0.0-beta.5", features = ["rusqlite"] }
 colored = "2.1.0"
 concurrent-map = "5.0.37"
 config = { version = "0.14.0", features = ["toml"], default-features = false }
