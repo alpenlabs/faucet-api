@@ -25,7 +25,7 @@ bdk_esplora = { version = "0.18.0", features = [
   "async-https",
   "async-https-rustls",
 ], default-features = false }
-bdk_wallet = { version = "1.0.0-beta.4", features = ["rusqlite"] }
+bdk_wallet = { version = "1.0.0-beta.5", features = ["rusqlite"] }
 colored = "2.1.0"
 concurrent-map = "5.0.37"
 config = { version = "0.14.0", features = ["toml"], default-features = false }
