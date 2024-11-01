@@ -8,7 +8,7 @@ resolver = "2"
 members = [".", "utils/html-solver"]
 
 [dependencies]
-alloy = { version = "0.3.5", features = [
+alloy = { version = "0.5.4", features = [
   "std",
   "rpc-client-ws",
   "network",
