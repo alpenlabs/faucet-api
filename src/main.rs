@@ -32,6 +32,7 @@ use bdk_wallet::{
     bitcoin::{address::NetworkUnchecked, Address as L1Address},
     KeychainKind,
 };
+use chrono::Utc;
 use hex::Hex;
 use l1::{fee_rate, L1Wallet, Persister, ESPLORA_CLIENT};
 use l2::L2Wallet;
@@ -185,6 +186,11 @@ async fn claim_l1(
     }
 
     let txid = tx.compute_txid();
+
+    let mut l1w = state.l1_wallet.write();
+    l1w.apply_unconfirmed_txs([(tx, Utc::now().timestamp() as u64)]);
+    l1w.persist(&mut Persister).expect("persist should work");
+    drop(l1w);
 
     info!("l1 claim to {address} via tx {}", txid);
 
