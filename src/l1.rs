@@ -48,8 +48,8 @@ pub fn spawn_fee_rate_task() {
                         info!("updated fee rate from {prev} to {new} sat/kwu")
                     }
                 }
-                Ok(None) => error!("failed to fetch latest fee rates - got none back"),
-                Err(e) => error!("failed to fetch latest fee rates: {e:?}"),
+                Ok(None) => warn!("failed to fetch latest fee rates - got none back"),
+                Err(e) => warn!("failed to fetch latest fee rates: {e:?}"),
             }
             sleep(Duration::from_secs(20)).await;
         }

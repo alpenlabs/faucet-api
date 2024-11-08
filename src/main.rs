@@ -89,6 +89,7 @@ async fn main() {
         .route("/pow_challenge", get(get_pow_challenge))
         .route("/claim_l1/:solution/:address", get(claim_l1))
         .route("/claim_l2/:solution/:address", get(claim_l2))
+        .route("/balance", get(get_balance))
         .layer(SETTINGS.ip_src.clone().into_extension())
         .with_state(state);
 
@@ -226,4 +227,14 @@ async fn claim_l2(
     info!("l2 claim to {address} via tx {}", txid);
 
     Ok(txid.to_string())
+}
+
+async fn get_balance(State(state): State<Arc<AppState>>) -> String {
+    state
+        .l1_wallet
+        .read()
+        .balance()
+        .confirmed
+        .to_sat()
+        .to_string()
 }
