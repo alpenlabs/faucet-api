@@ -41,7 +41,7 @@ use pow::{Challenge, Nonce, Solution};
 use seed::SavableSeed;
 use serde::{Deserialize, Serialize};
 use settings::SETTINGS;
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, task::spawn_blocking};
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
@@ -187,10 +187,14 @@ async fn claim_l1(
 
     let txid = tx.compute_txid();
 
-    let mut l1w = state.l1_wallet.write();
-    l1w.apply_unconfirmed_txs([(tx, Utc::now().timestamp() as u64)]);
-    l1w.persist(&mut Persister).expect("persist should work");
-    drop(l1w);
+    let state = state.clone();
+    spawn_blocking(move || {
+        let mut l1w = state.l1_wallet.write();
+        l1w.apply_unconfirmed_txs([(tx, Utc::now().timestamp() as u64)]);
+        l1w.persist(&mut Persister).expect("persist should work");
+    })
+    .await
+    .expect("successful blocking update");
 
     info!("l1 claim to {address} via tx {}", txid);
 
