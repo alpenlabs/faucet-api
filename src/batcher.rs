@@ -40,6 +40,7 @@ pub struct BatcherNotAvailable(SendError);
 pub struct BatcherConfig {
     pub period: Duration,
     pub max_per_tx: usize,
+    pub max_in_flight: usize,
 }
 
 impl Batcher {
@@ -65,6 +66,9 @@ impl Batcher {
                 select! {
                     biased;
                     instant = batch_interval.tick() => {
+                        if l1_payout_queue.is_empty() {
+                            continue
+                        }
                         let span = info_span!("batch processing", batch = ?instant);
                         let _guard = span.enter();
 
@@ -78,7 +82,13 @@ impl Batcher {
                             psbt.add_recipient(req.address.script_pubkey(), req.amount);
                             total_sent += req.amount;
                         }
-                        let mut psbt = psbt.finish().expect("valid tx");
+                        let mut psbt = match psbt.finish() {
+                            Ok(psbt) => psbt,
+                            Err(e) => {
+                                error!("failed finalizing tx: {e:?}");
+                                continue;
+                            }
+                        };
 
                         let l1w = RwLockWriteGuard::downgrade(l1w);
 
@@ -105,7 +115,9 @@ impl Batcher {
                     }
                     req = rx.recv() => match req {
                         Ok(req) => match req {
-                            PayoutRequest::L1(req) => l1_payout_queue.push_back(req)
+                            PayoutRequest::L1(req) => if l1_payout_queue.len() < cfg.max_in_flight {
+                                l1_payout_queue.push_back(req)
+                            }
                         },
                         Err(e) => error!("error receiving PayoutRequest: {e:?}")
                     }

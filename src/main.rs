@@ -14,7 +14,6 @@ use std::{
     env,
     net::{IpAddr, SocketAddr},
     sync::{Arc, LazyLock},
-    time::Duration,
 };
 
 use alloy::{
@@ -30,7 +29,7 @@ use axum::{
     Json, Router,
 };
 use axum_client_ip::SecureClientIp;
-use batcher::{Batcher, BatcherConfig, L1PayoutRequest, PayoutRequest};
+use batcher::{Batcher, L1PayoutRequest, PayoutRequest};
 use bdk_wallet::{
     bitcoin::{address::NetworkUnchecked, Address as L1Address},
     KeychainKind,
@@ -82,12 +81,9 @@ async fn main() {
 
     let l2_wallet = L2Wallet::new(&seed).expect("l2 wallet creation to succeed");
     let l1_wallet = Arc::new(RwLock::new(l1_wallet));
-    let mut batcher = Batcher::new(BatcherConfig {
-        period: Duration::from_secs(30),
-        max_per_tx: 250,
-    });
-
+    let mut batcher = Batcher::new(SETTINGS.batcher.clone());
     batcher.start(l1_wallet.clone());
+
     L1Wallet::spawn_syncer(l1_wallet.clone());
 
     let state = Arc::new(AppState {
