@@ -20,10 +20,11 @@ use bdk_wallet::{
     rusqlite::{self, Connection},
     ChangeSet, KeychainKind, PersistedWallet, Wallet, WalletPersister,
 };
+use parking_lot::RwLock;
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
-use crate::{seed::Seed, AppState, SETTINGS};
+use crate::{seed::Seed, SETTINGS};
 
 /// Live updating fee rate in sat/kwu
 static FEE_RATE: AtomicU64 = AtomicU64::new(250);
@@ -141,11 +142,10 @@ impl L1Wallet {
 
     /// Spawns a tokio task that scans the chain for the wallet's outputs
     /// every 30 secs.
-    pub fn spawn_syncer(state: Arc<AppState>) {
+    pub fn spawn_syncer(l1_wallet: Arc<RwLock<L1Wallet>>) {
         tokio::spawn(async move {
             loop {
-                let req = state
-                    .l1_wallet
+                let req = l1_wallet
                     .read()
                     .start_full_scan()
                     .inspect({
@@ -169,7 +169,7 @@ impl L1Wallet {
                 {
                     // in a separate block otherwise compiler gets upset that we're holding
                     // this over the await point
-                    let mut l1w = state.l1_wallet.write();
+                    let mut l1w = l1_wallet.write();
                     l1w.apply_update(update)
                         .expect("should be able to connect to db");
                     l1w.persist(&mut Persister).expect("persist should work");

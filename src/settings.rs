@@ -3,6 +3,7 @@ use std::{
     path::PathBuf,
     str::FromStr,
     sync::LazyLock,
+    time::Duration,
 };
 
 use axum_client_ip::SecureClientIpSource;
@@ -10,7 +11,7 @@ use bdk_wallet::bitcoin::{Amount, Network};
 use config::Config;
 use serde::{Deserialize, Serialize};
 
-use crate::CRATE_NAME;
+use crate::{batcher::BatcherConfig, CRATE_NAME};
 
 pub static SETTINGS: LazyLock<Settings> = LazyLock::new(|| {
     let args = std::env::args().collect::<Vec<_>>();
@@ -49,9 +50,12 @@ pub struct InternalSettings {
     pub l2_http_endpoint: String,
     pub sats_per_claim: Amount,
     pub pow_difficulty: u8,
+    pub batcher_period: Option<u64>,
+    pub batcher_max_per_batch: Option<usize>,
+    pub batcher_max_in_flight: Option<usize>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 /// Settings struct filled with either config values or
 /// opinionated defaults
 pub struct Settings {
@@ -65,6 +69,7 @@ pub struct Settings {
     pub l2_http_endpoint: String,
     pub sats_per_claim: Amount,
     pub pow_difficulty: u8,
+    pub batcher: BatcherConfig,
 }
 
 // on L2, we represent 1 btc as 1 "eth" on the rollup
@@ -93,6 +98,11 @@ impl TryFrom<InternalSettings> for Settings {
             l2_http_endpoint: internal.l2_http_endpoint,
             sats_per_claim: internal.sats_per_claim,
             pow_difficulty: internal.pow_difficulty,
+            batcher: BatcherConfig {
+                period: Duration::from_secs(internal.batcher_period.unwrap_or(30)),
+                max_per_tx: internal.batcher_max_per_batch.unwrap_or(250),
+                max_in_flight: internal.batcher_max_in_flight.unwrap_or(2500),
+            },
         })
     }
 }

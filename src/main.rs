@@ -1,6 +1,7 @@
 //! A simple faucet server that uses [`axum`] and [`bdk_wallet`]
 //! to generate and dispense bitcoin.
 
+mod batcher;
 pub mod hex;
 pub mod l1;
 pub mod l2;
@@ -28,26 +29,27 @@ use axum::{
     Json, Router,
 };
 use axum_client_ip::SecureClientIp;
+use batcher::{Batcher, L1PayoutRequest, PayoutRequest};
 use bdk_wallet::{
     bitcoin::{address::NetworkUnchecked, Address as L1Address},
     KeychainKind,
 };
-use chrono::Utc;
 use hex::Hex;
-use l1::{fee_rate, L1Wallet, Persister, ESPLORA_CLIENT};
+use l1::{L1Wallet, Persister};
 use l2::L2Wallet;
-use parking_lot::{RwLock, RwLockWriteGuard};
+use parking_lot::RwLock;
 use pow::{Challenge, Nonce, Solution};
 use seed::SavableSeed;
 use serde::{Deserialize, Serialize};
 use settings::SETTINGS;
-use tokio::{net::TcpListener, task::spawn_blocking};
+use tokio::net::TcpListener;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
 pub struct AppState {
-    l1_wallet: RwLock<L1Wallet>,
+    l1_wallet: Arc<RwLock<L1Wallet>>,
     l2_wallet: L2Wallet,
+    batcher: Batcher,
 }
 
 pub static CRATE_NAME: LazyLock<String> =
@@ -78,13 +80,17 @@ async fn main() {
     l1::spawn_fee_rate_task();
 
     let l2_wallet = L2Wallet::new(&seed).expect("l2 wallet creation to succeed");
+    let l1_wallet = Arc::new(RwLock::new(l1_wallet));
+    let mut batcher = Batcher::new(SETTINGS.batcher.clone());
+    batcher.start(l1_wallet.clone());
+
+    L1Wallet::spawn_syncer(l1_wallet.clone());
 
     let state = Arc::new(AppState {
-        l1_wallet: l1_wallet.into(),
+        l1_wallet,
         l2_wallet,
+        batcher,
     });
-
-    L1Wallet::spawn_syncer(state.clone());
 
     let app = Router::new()
         .route("/pow_challenge", get(get_pow_challenge))
@@ -127,7 +133,7 @@ async fn claim_l1(
     SecureClientIp(ip): SecureClientIp,
     Path((solution, address)): Path<(Hex<Solution>, L1Address<NetworkUnchecked>)>,
     State(state): State<Arc<AppState>>,
-) -> Result<String, (StatusCode, String)> {
+) -> Result<(), (StatusCode, String)> {
     let IpAddr::V4(ip) = ip else {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -147,58 +153,16 @@ async fn claim_l1(
         )
     })?;
 
-    let psbt = {
-        let mut l1w = state.l1_wallet.write();
-        let balance = l1w.balance();
-        if balance.trusted_spendable() < SETTINGS.sats_per_claim {
-            return Err((
-                StatusCode::SERVICE_UNAVAILABLE,
-                "not enough bitcoin in the faucet".to_owned(),
-            ));
-        }
-        let mut psbt = l1w
-            .build_tx()
-            .fee_rate(fee_rate())
-            .add_recipient(address.script_pubkey(), SETTINGS.sats_per_claim)
-            .clone()
-            .finish()
-            .expect("transaction to be constructed");
-        let l1w = RwLockWriteGuard::downgrade(l1w);
-        l1w.sign(&mut psbt, Default::default())
-            .expect("signing should not fail");
-        psbt
-    };
+    state
+        .batcher
+        .queue_payout_request(PayoutRequest::L1(L1PayoutRequest {
+            address,
+            amount: SETTINGS.sats_per_claim,
+        }))
+        .await
+        .expect("successful queuing");
 
-    let tx = psbt.extract_tx().map_err(|e| {
-        error!("error extracting tx: {e:?}");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "error extracting tx".to_owned(),
-        )
-    })?;
-
-    if let Err(e) = ESPLORA_CLIENT.broadcast(&tx).await {
-        error!("error broadcasting tx: {e:?}");
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "error broadcasting".to_owned(),
-        ));
-    }
-
-    let txid = tx.compute_txid();
-
-    let state = state.clone();
-    spawn_blocking(move || {
-        let mut l1w = state.l1_wallet.write();
-        l1w.apply_unconfirmed_txs([(tx, Utc::now().timestamp() as u64)]);
-        l1w.persist(&mut Persister).expect("persist should work");
-    })
-    .await
-    .expect("successful blocking update");
-
-    info!("l1 claim to {address} via tx {}", txid);
-
-    Ok(txid.to_string())
+    Ok(())
 }
 
 async fn claim_l2(
