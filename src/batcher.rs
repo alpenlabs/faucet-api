@@ -44,6 +44,9 @@ pub struct BatcherConfig {
 }
 
 impl Batcher {
+    /// Creates a new `Batcher`.
+    /// You should call `Batcher::start` after this to start the batcher task,
+    /// otherwise the batcher won't do anything.
     pub fn new(cfg: BatcherConfig) -> Self {
         Self {
             task: None,
@@ -64,6 +67,8 @@ impl Batcher {
 
             loop {
                 select! {
+                    // biased to ensure that even if we have incoming requests, they don't block
+                    // each batch from being built when it's scheduled
                     biased;
                     instant = batch_interval.tick() => {
                         if l1_payout_queue.is_empty() {
