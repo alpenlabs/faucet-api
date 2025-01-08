@@ -53,6 +53,9 @@ tracing-subscriber = { version = "0.3.18", features = [
   "parking_lot",
 ] }
 
+[dev-dependencies]
+approx = "0.5.1"
+
 [profile.release]
 opt-level = 3     # Optimized for speed, use z for size
 lto = true        # Enable Link Time Optimization
