@@ -270,3 +270,26 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
 
     leading_zeros
 }
+
+pub fn calculate_difficulty(
+    max: f32,
+    min: f32,
+    balance: f32,
+    min_balance: f32,
+    release_amount: f32,
+) -> f32 {
+    // Ensure balance is at least min_balance to avoid invalid logarithm
+    if balance <= min_balance {
+        return max; // Return max difficulty if balance is at or below min_balance
+    }
+
+    // Calculate the normalized logarithmic term
+    let log_term = (balance / min_balance).log10();
+    let max_log_term = release_amount.log10();
+
+    // Calculate difficulty
+    let difficulty = min + (max - min) * (1.0 - log_term / max_log_term);
+
+    // Clamp difficulty between min and max
+    difficulty.clamp(min, max)
+}
