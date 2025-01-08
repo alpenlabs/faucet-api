@@ -118,14 +118,24 @@ pub struct PowChallenge {
 
 async fn get_pow_challenge(
     SecureClientIp(ip): SecureClientIp,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<PowChallenge>, (StatusCode, &'static str)> {
     if let IpAddr::V4(ip) = ip {
         Ok(Json(PowChallenge {
             nonce: Hex(Challenge::get(&ip).nonce()),
-            difficulty: SETTINGS.pow_difficulty,
+            difficulty: pow::calculate_difficulty(
+                255.0,
+                17.0,
+                state.l1_wallet.read().balance().confirmed.to_btc() as f32,
+                500.,
+                SETTINGS.sats_per_claim.to_btc() as f32,
+            ) as u8,
         }))
     } else {
-        Err((StatusCode::SERVICE_UNAVAILABLE, "IPV6 is not unavailable"))
+        Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "IPV6 is not supported at this time",
+        ))
     }
 }
 
@@ -137,7 +147,7 @@ async fn claim_l1(
     let IpAddr::V4(ip) = ip else {
         return Err((
             StatusCode::BAD_REQUEST,
-            "IPV6 is not unavailable".to_string(),
+            "IPV6 is not supported at this time".to_string(),
         ));
     };
 
