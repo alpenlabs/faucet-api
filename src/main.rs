@@ -31,7 +31,7 @@ use axum::{
 use axum_client_ip::SecureClientIp;
 use batcher::{Batcher, L1PayoutRequest, PayoutRequest};
 use bdk_wallet::{
-    bitcoin::{address::NetworkUnchecked, Address as L1Address},
+    bitcoin::{address::NetworkUnchecked, Address as L1Address, Amount},
     KeychainKind,
 };
 use hex::Hex;
@@ -126,9 +126,9 @@ async fn get_pow_challenge(
             difficulty: pow::calculate_difficulty(
                 255.0,
                 17.0,
-                state.l1_wallet.read().balance().confirmed.to_btc() as f32,
-                500.,
-                SETTINGS.sats_per_claim.to_btc() as f32,
+                state.l1_wallet.read().balance().confirmed,
+                Amount::from_int_btc(500),
+                SETTINGS.sats_per_claim,
             ) as u8,
         }))
     } else {

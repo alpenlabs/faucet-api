@@ -8,6 +8,7 @@ use std::{
 };
 
 use arrayvec::ArrayVec;
+use bdk_wallet::bitcoin::Amount;
 use concurrent_map::{CasFailure, ConcurrentMap};
 use parking_lot::{Mutex, MutexGuard};
 use rand::{rng, Rng};
@@ -272,24 +273,24 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
 }
 
 pub fn calculate_difficulty(
-    max: f32,
-    min: f32,
-    balance: f32,
-    min_balance: f32,
-    release_amount: f32,
+    max_difficulty: f32,
+    min_difficulty: f32,
+    balance: Amount,
+    min_balance: Amount,
+    per_emission: Amount,
 ) -> f32 {
     // Ensure balance is at least min_balance to avoid invalid logarithm
     if balance <= min_balance {
-        return max; // Return max difficulty if balance is at or below min_balance
+        return max_difficulty; // Return max difficulty if balance is at or below min_balance
     }
 
-    // Calculate the normalized logarithmic term
-    let log_term = (balance / min_balance).log10();
-    let max_log_term = release_amount.log10();
+    let balance = balance.to_btc() as f32;
+    let min_balance = min_balance.to_btc() as f32;
+    let per_emission = per_emission.to_btc() as f32;
 
-    // Calculate difficulty
-    let difficulty = min + (max - min) * (1.0 - log_term / max_log_term);
+    let log_term = ((balance - min_balance) / min_balance).log(per_emission);
 
-    // Clamp difficulty between min and max
-    difficulty.clamp(min, max)
+    let difficulty = (max_difficulty - min_difficulty) * (1.0 - log_term) + min_difficulty;
+
+    difficulty.clamp(min_difficulty, max_difficulty)
 }
