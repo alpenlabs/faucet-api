@@ -21,6 +21,7 @@ use crate::err;
 pub struct Challenge {
     nonce: Nonce,
     expires_at: Instant,
+    difficulty: u8,
 }
 
 const TTL: Duration = Duration::from_secs(60);
@@ -37,37 +38,49 @@ impl Challenge {
     ///
     /// Note that this doesn't support IPv6 yet because those IPs are a lot
     /// easier to get.
-    pub fn get(ip: &Ipv4Addr) -> Self {
+    pub fn get(ip: &Ipv4Addr, difficulty_if_not_present: u8) -> Self {
         let nonce = thread_rng().gen();
         let expires_at = Instant::now() + TTL;
-        match nonce_set().cas(ip.to_bits(), None, Some((nonce, false))) {
+        match nonce_set().cas(
+            ip.to_bits(),
+            None,
+            Some((nonce, false, difficulty_if_not_present, expires_at)),
+        ) {
             Ok(None) => {
-                let nonce = Self { nonce, expires_at };
+                let nonce = Self {
+                    nonce,
+                    expires_at,
+                    difficulty: difficulty_if_not_present,
+                };
                 EvictionQueue::add_nonce(&nonce, *ip);
                 nonce
             }
             // Unreachable as this CAS will return a Some(..) only
             // in an Err.
             Ok(Some(_)) => unreachable!(),
-            Err(CasFailure { actual, .. }) => Self {
-                // safety: safe to unwrap actual as if it were None
-                // we would've got an Ok
-                nonce: actual.unwrap().0,
+            Err(CasFailure {
+                actual: Some((nonce, _, difficulty, expires_at)),
+                ..
+            }) => Self {
+                nonce,
                 expires_at,
+                difficulty,
             },
+            Err(CasFailure { actual: None, .. }) => unreachable!(),
         }
     }
 
     /// Validates the proof of work solution by the client.
     pub fn valid(
         ip: &Ipv4Addr,
-        difficulty: u8,
         solution: Solution,
     ) -> Result<(), OneOf<(NonceNotFound, BadProofOfWork, AlreadyClaimed)>> {
         let ns = nonce_set();
         let raw_ip = ip.to_bits();
-        let nonce = match ns.get(&raw_ip) {
-            Some((nonce, claimed)) if !claimed => nonce,
+        let (nonce, difficulty, expires_at) = match ns.get(&raw_ip) {
+            Some((nonce, claimed, difficulty, expires_at)) if !claimed => {
+                (nonce, difficulty, expires_at)
+            }
             Some(_) => return err!(AlreadyClaimed),
             None => return err!(NonceNotFound),
         };
@@ -77,7 +90,7 @@ impl Challenge {
         hasher.update(solution);
         let pow_valid = count_leading_zeros(&hasher.finalize()) >= difficulty;
         if pow_valid {
-            ns.insert(raw_ip, (nonce, true));
+            ns.insert(raw_ip, (nonce, true, difficulty, expires_at));
             return Ok(());
         }
         err!(BadProofOfWork)
@@ -85,6 +98,10 @@ impl Challenge {
 
     pub fn nonce(&self) -> [u8; 16] {
         self.nonce
+    }
+
+    pub fn difficulty(&self) -> u8 {
+        self.difficulty
     }
 }
 
@@ -94,7 +111,7 @@ pub type Nonce = [u8; 16];
 /// has a nonce present. IPs stored as u32 form for
 /// compatibility with concurrent map. IPs are big endian
 /// but these are notably using platform endianness.
-pub type NonceSet = ConcurrentMap<u32, (Nonce, bool)>;
+pub type NonceSet = ConcurrentMap<u32, (Nonce, bool, u8, Instant)>;
 
 static CELL: OnceLock<Mutex<NonceSet>> = OnceLock::new();
 

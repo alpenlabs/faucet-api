@@ -121,15 +121,17 @@ async fn get_pow_challenge(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<PowChallenge>, (StatusCode, &'static str)> {
     if let IpAddr::V4(ip) = ip {
+        let difficulty = pow::calculate_difficulty(
+            255.0,
+            17.0,
+            state.l1_wallet.read().balance().confirmed,
+            Amount::from_int_btc(500),
+            SETTINGS.sats_per_claim,
+        ) as u8;
+        let challenge = Challenge::get(&ip, difficulty);
         Ok(Json(PowChallenge {
-            nonce: Hex(Challenge::get(&ip).nonce()),
-            difficulty: pow::calculate_difficulty(
-                255.0,
-                17.0,
-                state.l1_wallet.read().balance().confirmed,
-                Amount::from_int_btc(500),
-                SETTINGS.sats_per_claim,
-            ) as u8,
+            nonce: Hex(challenge.nonce()),
+            difficulty: challenge.difficulty(),
         }))
     } else {
         Err((
@@ -152,7 +154,7 @@ async fn claim_l1(
     };
 
     // num hashes on average to solve challenge: 2^15
-    if let Err(e) = Challenge::valid(&ip, SETTINGS.pow_difficulty, solution.0) {
+    if let Err(e) = Challenge::valid(&ip, solution.0) {
         return Err((StatusCode::BAD_REQUEST, format!("{e:?}")));
     }
 
@@ -188,7 +190,7 @@ async fn claim_l2(
     };
 
     // num hashes on average to solve challenge: 2^15
-    if let Err(e) = Challenge::valid(&ip, SETTINGS.pow_difficulty, solution.0) {
+    if let Err(e) = Challenge::valid(&ip, solution.0) {
         return Err((StatusCode::BAD_REQUEST, format!("{e:?}")));
     }
 
