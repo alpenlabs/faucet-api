@@ -40,18 +40,33 @@ pub static SETTINGS: LazyLock<Settings> = LazyLock::new(|| {
 
 #[derive(Serialize, Deserialize)]
 pub struct InternalSettings {
+    /// Host to listen for HTTP requests on
     pub host: Option<IpAddr>,
+    /// Port to listen for HTTP requests on
     pub port: Option<u16>,
+    /// How the server should determine the client's IP address
     pub ip_src: SecureClientIpSource,
+    /// Path to the seed file which stores the wallet's seed/master bytes
     pub seed_file: Option<String>,
+    /// Path to the SQLite database file which stores the wallet's data
     pub sqlite_file: Option<String>,
+    /// Network to use for the wallet. Defaults to [`Network::Signet`]
     pub network: Option<Network>,
+    /// URL of the esplora API to use for the wallet. Should not have a trailing slash
     pub esplora: String,
+    /// URL of the EVM L2 HTTP endpoint to use for the wallet. Should not have a trailing slash
     pub l2_http_endpoint: String,
+    /// Amount of sats to give to the user per claim
     pub sats_per_claim: Amount,
-    pub pow_difficulty: u8,
+    /// Used in POW difficulty calculation. Defaults to 500 BTC. The faucet make
+    /// it progressively harder to claim funds as the balance of the wallet
+    /// approaches this value.
+    pub min_balance: Amount,
+    /// How long the period for transaction batching is. Defaults to 30 seconds
     pub batcher_period: Option<u64>,
+    /// Maximum number of transactions to batch per batching period. Defaults to 250
     pub batcher_max_per_batch: Option<usize>,
+    /// Maximum number of requests to allow in memory at a time. Defaults to 2500
     pub batcher_max_in_flight: Option<usize>,
 }
 
@@ -68,7 +83,6 @@ pub struct Settings {
     pub esplora: String,
     pub l2_http_endpoint: String,
     pub sats_per_claim: Amount,
-    pub pow_difficulty: u8,
     pub batcher: BatcherConfig,
 }
 
@@ -97,7 +111,6 @@ impl TryFrom<InternalSettings> for Settings {
             esplora: internal.esplora,
             l2_http_endpoint: internal.l2_http_endpoint,
             sats_per_claim: internal.sats_per_claim,
-            pow_difficulty: internal.pow_difficulty,
             batcher: BatcherConfig {
                 period: Duration::from_secs(internal.batcher_period.unwrap_or(30)),
                 max_per_tx: internal.batcher_max_per_batch.unwrap_or(250),
