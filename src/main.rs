@@ -14,6 +14,7 @@ use std::{
     env,
     net::{IpAddr, SocketAddr},
     sync::{Arc, LazyLock},
+    u8,
 };
 
 use alloy::{
@@ -31,7 +32,7 @@ use axum::{
 use axum_client_ip::SecureClientIp;
 use batcher::{Batcher, L1PayoutRequest, PayoutRequest};
 use bdk_wallet::{
-    bitcoin::{address::NetworkUnchecked, Address as L1Address, Amount},
+    bitcoin::{address::NetworkUnchecked, Address as L1Address},
     KeychainKind,
 };
 use hex::Hex;
@@ -111,7 +112,7 @@ async fn main() {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct PowChallenge {
+pub struct ProvidedChallenge {
     nonce: Hex<Nonce>,
     difficulty: u8,
 }
@@ -119,17 +120,17 @@ pub struct PowChallenge {
 async fn get_pow_challenge(
     SecureClientIp(ip): SecureClientIp,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<PowChallenge>, (StatusCode, &'static str)> {
+) -> Result<Json<ProvidedChallenge>, (StatusCode, &'static str)> {
     if let IpAddr::V4(ip) = ip {
         let difficulty = pow::calculate_difficulty(
-            255.0,
-            17.0,
+            u8::MAX as f32,
+            SETTINGS.pow.min_difficulty as f32,
             state.l1_wallet.read().balance().confirmed,
-            Amount::from_int_btc(500),
+            SETTINGS.pow.min_balance,
             SETTINGS.sats_per_claim,
         ) as u8;
         let challenge = Challenge::get(&ip, difficulty);
-        Ok(Json(PowChallenge {
+        Ok(Json(ProvidedChallenge {
             nonce: Hex(challenge.nonce()),
             difficulty: challenge.difficulty(),
         }))
@@ -154,7 +155,7 @@ async fn claim_l1(
     };
 
     // num hashes on average to solve challenge: 2^15
-    if let Err(e) = Challenge::valid(&ip, solution.0) {
+    if let Err(e) = Challenge::check_solution(&ip, solution.0) {
         return Err((StatusCode::BAD_REQUEST, format!("{e:?}")));
     }
 
@@ -190,7 +191,7 @@ async fn claim_l2(
     };
 
     // num hashes on average to solve challenge: 2^15
-    if let Err(e) = Challenge::valid(&ip, solution.0) {
+    if let Err(e) = Challenge::check_solution(&ip, solution.0) {
         return Err((StatusCode::BAD_REQUEST, format!("{e:?}")));
     }
 
