@@ -12,19 +12,55 @@ use bdk_wallet::bitcoin::Amount;
 use concurrent_map::{CasFailure, ConcurrentMap};
 use parking_lot::{Mutex, MutexGuard};
 use rand::{rng, Rng};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use terrors::OneOf;
 use tokio::time::sleep;
 
-use crate::err;
+use crate::{err, settings::SETTINGS};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Challenge {
     nonce: Nonce,
+    claimed: bool,
     expires_at: Instant,
     difficulty: u8,
 }
 
-const TTL: Duration = Duration::from_secs(60);
+#[derive(Deserialize, Serialize, Debug)]
+pub struct PowConfig {
+    /// Minimum balance required for a user to claim funds. Defaults to 500 BTC,
+    /// or 50_000_000_000 sats. When configuring in the config file, this value
+    /// should be in sats as a number.
+    pub min_balance: Amount,
+    /// Minimum difficulty required for a user to claim funds. Defaults to 17.
+    ///
+    /// Users will have to solve a POW challenge witha chance of finding of
+    /// 1 / 2^min_difficulty per random guess. The faucet will dynamically adjust
+    /// the actual difficulty given to the user based on the current balance,
+    /// min_balance and sats_per_claim.
+    pub min_difficulty: u8,
+    /// How long a challenge is valid for. Defaults to 60 seconds.
+    ///
+    /// In config, this should be provided as an object with fields `secs` and `nanos`.
+    /// For example:
+    ///
+    /// ```toml
+    /// [pow]
+    /// challenge_duration = { secs = 60, nanos = 0 }
+    /// ```
+    pub challenge_duration: Duration,
+}
+
+impl Default for PowConfig {
+    fn default() -> Self {
+        Self {
+            min_balance: Amount::from_int_btc(500),
+            min_difficulty: 17,
+            challenge_duration: Duration::from_secs(60),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct NonceNotFound;
@@ -39,61 +75,60 @@ impl Challenge {
     /// Note that this doesn't support IPv6 yet because those IPs are a lot
     /// easier to get.
     pub fn get(ip: &Ipv4Addr, difficulty_if_not_present: u8) -> Self {
-        let nonce = rng().random();
-        let expires_at = Instant::now() + TTL;
-        match nonce_set().cas(
-            ip.to_bits(),
-            None,
-            Some((nonce, false, difficulty_if_not_present, expires_at)),
-        ) {
+        let challenge = Self {
+            nonce: rng().random(),
+            claimed: false,
+            expires_at: Instant::now() + SETTINGS.pow.challenge_duration,
+            difficulty: difficulty_if_not_present,
+        };
+        match challenge_set().cas(ip.to_bits(), None, Some(challenge.clone())) {
             Ok(None) => {
-                let nonce = Self {
-                    nonce,
-                    expires_at,
-                    difficulty: difficulty_if_not_present,
-                };
-                EvictionQueue::add_nonce(&nonce, *ip);
-                nonce
+                EvictionQueue::add_challenge(&challenge, *ip);
+                challenge
             }
+            Err(CasFailure {
+                actual: Some(challenge),
+                ..
+            }) => challenge,
             // Unreachable as this CAS will return a Some(..) only
             // in an Err.
             Ok(Some(_)) => unreachable!(),
-            Err(CasFailure {
-                actual: Some((nonce, _, difficulty, expires_at)),
-                ..
-            }) => Self {
-                nonce,
-                expires_at,
-                difficulty,
-            },
+            // Unreachable for same reason as above
             Err(CasFailure { actual: None, .. }) => unreachable!(),
         }
     }
 
     /// Validates the proof of work solution by the client.
-    pub fn valid(
+    pub fn check_solution(
         ip: &Ipv4Addr,
         solution: Solution,
     ) -> Result<(), OneOf<(NonceNotFound, BadProofOfWork, AlreadyClaimed)>> {
-        let ns = nonce_set();
+        let ns = challenge_set();
         let raw_ip = ip.to_bits();
-        let (nonce, difficulty, expires_at) = match ns.get(&raw_ip) {
-            Some((nonce, claimed, difficulty, expires_at)) if !claimed => {
-                (nonce, difficulty, expires_at)
-            }
+        let mut challenge = match ns.get(&raw_ip) {
+            Some(nonce_data) if !nonce_data.claimed => nonce_data,
             Some(_) => return err!(AlreadyClaimed),
             None => return err!(NonceNotFound),
         };
+
         let mut hasher = Sha256::new();
         hasher.update(b"strata faucet 2024");
-        hasher.update(nonce);
+        hasher.update(challenge.nonce);
         hasher.update(solution);
-        let pow_valid = count_leading_zeros(&hasher.finalize()) >= difficulty;
-        if pow_valid {
-            ns.insert(raw_ip, (nonce, true, difficulty, expires_at));
-            return Ok(());
+
+        // note, we mark the challenge as claimed here whether or not the
+        // proof of work is valid. This is because this effectively ratelimits
+        // the number of times a client can try to solve a challenge and waste
+        // our server resources.
+        challenge.claimed = true;
+        let required_difficulty = challenge.difficulty;
+        ns.insert(raw_ip, challenge);
+
+        if count_leading_zeros(&hasher.finalize()) >= required_difficulty {
+            Ok(())
+        } else {
+            err!(BadProofOfWork)
         }
-        err!(BadProofOfWork)
     }
 
     pub fn nonce(&self) -> [u8; 16] {
@@ -111,13 +146,13 @@ pub type Nonce = [u8; 16];
 /// has a nonce present. IPs stored as u32 form for
 /// compatibility with concurrent map. IPs are big endian
 /// but these are notably using platform endianness.
-pub type NonceSet = ConcurrentMap<u32, (Nonce, bool, u8, Instant)>;
+pub type ChallengeSet = ConcurrentMap<u32, Challenge>;
 
-static CELL: OnceLock<Mutex<NonceSet>> = OnceLock::new();
+static CELL: OnceLock<Mutex<ChallengeSet>> = OnceLock::new();
 
 thread_local! {
-    static NONCE_SET: Rc<NonceSet> = Rc::new(
-        // ensure CELL is initialised with the empty NonceSet
+    static CHALLENGE_SET: Rc<ChallengeSet> = Rc::new(
+        // ensure CELL is initialised with the empty ChallengeSet
         // lock it to this thread
         CELL.get_or_init(Default::default).lock()
             // clone and store a copy thread local
@@ -127,13 +162,13 @@ thread_local! {
 }
 
 /// Helper function to retrieve the thread local instantiation of the
-/// [`NonceSet`]
-pub fn nonce_set() -> Rc<NonceSet> {
-    NONCE_SET.with(|ns| ns.clone())
+/// [`ChallengeSet`]
+pub fn challenge_set() -> Rc<ChallengeSet> {
+    CHALLENGE_SET.with(|ns| ns.clone())
 }
 
-/// A queue for evicting old challenges' nonces from the
-/// nonce set efficiently and automatically using a [`VecDeque`]
+/// A queue for evicting old challenges from the
+/// challenge set efficiently and automatically using a [`VecDeque`]
 /// and a background task.
 pub struct EvictionQueue {
     q: Mutex<VecDeque<EvictionEntry>>,
@@ -158,12 +193,12 @@ impl EvictionQueue {
         eq
     }
 
-    /// Adds a nonce to the eviction queue to be removed TTL in the future
-    pub fn add_nonce(nonce: &Challenge, ip: Ipv4Addr) {
+    /// Adds a challenge to the eviction queue to be removed TTL in the future
+    pub fn add_challenge(challenge: &Challenge, ip: Ipv4Addr) {
         let mut q = EVICTION_Q.q.lock();
         q.push_back(EvictionEntry {
             ip,
-            expires_at: nonce.expires_at,
+            expires_at: challenge.expires_at,
         });
         EVICTION_Q.remove_expired_internal(q)
     }
@@ -218,7 +253,7 @@ impl EvictionQueue {
 }
 
 fn delete_expired(to_expire: &[u32]) {
-    let ns = nonce_set();
+    let ns = challenge_set();
     for ip in to_expire {
         ns.remove(ip);
     }
@@ -289,6 +324,13 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
     leading_zeros
 }
 
+/// The faucet will dynamically adjust the difficulty based on the
+/// current balance of the faucet to make it increasingly difficult
+/// to retrieve funds from the faucet. The actual equation for this
+/// is:
+/// ```math
+/// \text{difficulty} = \left(\text{max\_difficulty} - \text{min\_difficulty}\right) \cdot \left(1 - \log_{\text{btc\_per\_emission}}\left(\frac{\text{balance} - \text{min\_balance}}{\text{min\_balance}}\right)\right)+\text{min\_difficulty}
+/// ```
 pub fn calculate_difficulty(
     max_difficulty: f32,
     min_difficulty: f32,
