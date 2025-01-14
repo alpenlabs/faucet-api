@@ -128,7 +128,8 @@ async fn get_pow_challenge(
             state.l1_wallet.read().balance().confirmed,
             SETTINGS.pow.min_balance,
             SETTINGS.sats_per_claim,
-        ) as u8;
+        )
+        .unwrap() as u8;
         let challenge = Challenge::get(&ip, difficulty);
         Ok(Json(ProvidedChallenge {
             nonce: Hex(challenge.nonce()),
