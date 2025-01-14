@@ -29,20 +29,26 @@ pub struct Challenge {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct PowConfig {
-    /// Minimum balance required for a user to claim funds. Defaults to 500 BTC,
-    /// or 50_000_000_000 sats. When configuring in the config file, this value
+    /// Minimum balance required for a user to claim funds.
+    ///
+    /// Defaults to `500` BTC, or `50_000_000_000` sats.
+    /// When configuring in the config file, this value
     /// should be in sats as a number.
     pub min_balance: Amount,
-    /// Minimum difficulty required for a user to claim funds. Defaults to 17.
+    /// Minimum difficulty required for a user to claim funds.
     ///
-    /// Users will have to solve a POW challenge witha chance of finding of
-    /// 1 / 2^min_difficulty per random guess. The faucet will dynamically adjust
+    /// Defaults to `17`.
+    ///
+    /// Users will have to solve a POW challenge with a chance of finding of
+    /// `1 / 2^min_difficulty` per random guess. The faucet will dynamically adjust
     /// the actual difficulty given to the user based on the current balance,
-    /// min_balance and sats_per_claim.
+    /// `min_balance` and `sats_per_claim`.
     pub min_difficulty: u8,
-    /// How long a challenge is valid for. Defaults to 60 seconds.
+    /// How long a challenge is valid for.
     ///
-    /// In config, this should be provided as an object with fields `secs` and `nanos`.
+    /// Defaults to `60` seconds.
+    ///
+    /// In config, this should be provided as an object with fields `secs` and `nanos` with integers.
     /// For example:
     ///
     /// ```toml
@@ -328,6 +334,7 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
 /// current balance of the faucet to make it increasingly difficult
 /// to retrieve funds from the faucet. The actual equation for this
 /// is:
+///
 /// ```math
 /// \text{difficulty} = \left(\text{max\_difficulty} - \text{min\_difficulty}\right) \cdot \left(1 - \log_{\text{btc\_per\_emission}}\left(\frac{\text{balance} - \text{min\_balance}}{\text{min\_balance}}\right)\right)+\text{min\_difficulty}
 /// ```

@@ -39,11 +39,19 @@ pub struct BatcherNotAvailable(SendError);
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BatcherConfig {
-    /// How long the period for transaction batching is. Defaults to 30 seconds
+    /// How long the period for transaction batching is.
+    ///
+    /// Defaults to `30` seconds.
     pub period: Duration,
-    /// Maximum number of transactions to batch per batching period. Defaults to 250
+    
+    /// Maximum number of transactions to batch per batching period.
+    ///
+    /// Defaults to `250`.
     pub max_per_tx: usize,
-    /// Maximum number of requests to allow in memory at a time. Defaults to 2500
+    
+    /// Maximum number of requests to allow in memory at a time.
+    ///
+    /// Defaults to `2_500`.
     pub max_in_flight: usize,
 }
 
