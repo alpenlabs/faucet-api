@@ -357,6 +357,7 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
 /// ```
 ///
 /// where:
+///
 /// - `M` is the maximum difficulty
 /// - `m` is the minimum difficulty
 /// - `x` is the current balance in BTC
@@ -364,6 +365,7 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
 /// - `q` is the amount emitted per request in BTC
 ///
 /// # Guarantees
+///
 /// This function guarantees that the difficulty will be between `min_difficulty`
 /// and `max_difficulty` given that the correctness assumptions are met.
 ///
