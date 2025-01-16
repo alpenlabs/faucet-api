@@ -93,6 +93,10 @@ impl TryFrom<InternalSettings> for Settings {
         if internal.sats_per_claim > MAX_SATS_PER_CLAIM {
             panic!("sats per claim is too high, max is {MAX_SATS_PER_CLAIM}");
         }
+        if (internal.sats_per_claim > Amount::ONE_BTC) == false {
+            panic!("sats per claim is too low, must be greater than 1 BTC");
+        }
+
         Ok(Self {
             host: internal.host.unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
             port: internal.port.unwrap_or(3000),
@@ -106,7 +110,10 @@ impl TryFrom<InternalSettings> for Settings {
             l2_http_endpoint: internal.l2_http_endpoint,
             sats_per_claim: internal.sats_per_claim,
             batcher: internal.batcher.unwrap_or_default(),
-            pow: internal.pow.unwrap_or_default(),
+            pow: internal
+                .pow
+                .inspect(|c| c.validate().unwrap())
+                .unwrap_or_default(),
         })
     }
 }

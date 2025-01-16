@@ -125,11 +125,10 @@ async fn get_pow_challenge(
         let difficulty = pow::calculate_difficulty(
             u8::MAX as f32,
             SETTINGS.pow.min_difficulty as f32,
-            state.l1_wallet.read().balance().confirmed,
-            SETTINGS.pow.min_balance,
-            SETTINGS.sats_per_claim,
-        )
-        .unwrap() as u8;
+            state.l1_wallet.read().balance().confirmed.to_btc() as f32,
+            SETTINGS.pow.min_balance.to_btc() as f32,
+            SETTINGS.sats_per_claim.to_btc() as f32,
+        ) as u8;
         let challenge = Challenge::get(&ip, difficulty);
         Ok(Json(ProvidedChallenge {
             nonce: Hex(challenge.nonce()),
