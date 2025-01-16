@@ -1,5 +1,3 @@
-use std::fmt::Display;
-use std::fmt::{Debug, Formatter};
 use std::{
     cmp::Ordering,
     collections::VecDeque,
@@ -58,6 +56,23 @@ pub struct PowConfig {
     /// challenge_duration = { secs = 60, nanos = 0 }
     /// ```
     pub challenge_duration: Duration,
+}
+
+impl PowConfig {
+    pub fn validate(&self) -> Result<(), InvalidPowConfig> {
+        // min_balance >= 0 as u64
+        // 0 <= min_difficulty <= 255 because u8 so valid
+        if self.min_balance == Amount::ZERO {
+            return Err(InvalidPowConfig::MinBalance("min_balance isn't positive"));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum InvalidPowConfig {
+    MinBalance(&'static str),
+    MinDifficulty(&'static str),
 }
 
 impl Default for PowConfig {
@@ -338,79 +353,33 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
 /// is:
 ///
 /// ```math
-/// \text{difficulty} = \left(\text{max\_difficulty} - \text{min\_difficulty}\right) \cdot \left(1 - \log_{\text{btc\_per\_emission}}\left(\frac{\text{balance} - \text{min\_balance}}{\text{min\_balance}}\right)\right)+\text{min\_difficulty}
+/// f(x)=(M-m)(1-\log_{q}\frac{x}{b})+m
 /// ```
 ///
-/// # Errors
+/// where:
+/// - `M` is the maximum difficulty
+/// - `m` is the minimum difficulty
+/// - `x` is the current balance in BTC
+/// - `b` is the minimum balance in BTC
+/// - `q` is the amount emitted per request in BTC
 ///
-/// This function will return an error if any of the following conditions are met:
+/// # Guarantees
+/// This function guarantees that the difficulty will be between `min_difficulty`
+/// and `max_difficulty` given that the correctness assumptions are met.
 ///
-/// - `min_balance` is zero
-/// - `max_difficulty` is less than `min_difficulty`
-/// - `per_emission` is zero or equal to 1 BTC
-pub fn calculate_difficulty(
-    max_difficulty: f32,
-    min_difficulty: f32,
-    balance: Amount,
-    min_balance: Amount,
-    per_emission: Amount,
-) -> Result<f32, DifficultyCalculationError> {
-    if min_balance == Amount::ZERO {
-        return Err(DifficultyCalculationError::MinBalanceZero);
-    }
-    if max_difficulty < min_difficulty {
-        return Err(DifficultyCalculationError::MaxDifficultyLessThanMinDifficulty);
-    }
-    // cannot be < 0 because Amount is a u64
-    if per_emission == Amount::ZERO {
-        return Err(DifficultyCalculationError::PerEmissionIsZero);
-    }
-    if per_emission == Amount::ONE_BTC {
-        return Err(DifficultyCalculationError::PerEmissionEqualToOneBtc);
+/// # Correctness
+///
+/// For this function correctly output, you must ensure:
+///
+/// - `per_emission` > `Amount::ONE_BTC`, ideally >2 BTC due to the way the curve
+///   functions
+/// - `min_difficulty` <= `max_difficulty`
+/// - `max_difficulty`, `min_difficulty`, `balance`, `min_balance` and `x` all > 0
+pub fn calculate_difficulty(big_m: f32, m: f32, x: f32, b: f32, q: f32) -> f32 {
+    // optimisation for when the balance is less than or equal to the min balance
+    if x <= b {
+        return big_m;
     }
 
-    // Ensure balance is at least min_balance to avoid invalid logarithm
-    if balance <= min_balance {
-        return Ok(max_difficulty); // Return max difficulty if balance is at or below min_balance
-    }
-
-    let balance = balance.to_btc() as f32;
-    let min_balance = min_balance.to_btc() as f32;
-    let per_emission = per_emission.to_btc() as f32;
-
-    let log_term = ((balance - min_balance) / min_balance).log(per_emission);
-
-    let difficulty = (max_difficulty - min_difficulty) * (1.0 - log_term) + min_difficulty;
-
-    Ok(difficulty.clamp(min_difficulty, max_difficulty))
-}
-
-pub enum DifficultyCalculationError {
-    MinBalanceZero,
-    MaxDifficultyLessThanMinDifficulty,
-    PerEmissionIsZero,
-    PerEmissionEqualToOneBtc,
-}
-
-impl Debug for DifficultyCalculationError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DifficultyCalculationError::MinBalanceZero => write!(f, "min balance must be non-zero"),
-            DifficultyCalculationError::MaxDifficultyLessThanMinDifficulty => {
-                write!(f, "max_difficulty must be larger than min_difficulty")
-            }
-            DifficultyCalculationError::PerEmissionIsZero => {
-                write!(f, "per_emission must be non-zero")
-            }
-            DifficultyCalculationError::PerEmissionEqualToOneBtc => {
-                write!(f, "per_emission must not be 1 BTC")
-            }
-        }
-    }
-}
-
-impl Display for DifficultyCalculationError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(self, f)
-    }
+    ((big_m - m) * (1.0 - (x / b).log(q)) + b).clamp(m, big_m)
 }
