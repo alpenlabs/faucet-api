@@ -1,3 +1,4 @@
+//! Serves a single file from the local filesystem.
 use std::{convert::Infallible, error::Error, fs, net::SocketAddr, path::Path};
 
 use bytes::Bytes;
