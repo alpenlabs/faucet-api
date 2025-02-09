@@ -1,11 +1,17 @@
-use std::{convert::Infallible, fs, net::SocketAddr, path::Path};
+use std::{convert::Infallible, error::Error, fs, net::SocketAddr, path::Path};
 
-use hyper::{
-    service::{make_service_fn, service_fn},
-    Body, Request, Response, Server, StatusCode,
+use bytes::Bytes;
+use http_body_util::{combinators::BoxBody, BodyExt, Full};
+use hyper::{body::Incoming, service::service_fn, Request, Response, StatusCode};
+use hyper_util::{
+    rt::{TokioExecutor, TokioIo},
+    server::conn::auto::Builder,
 };
+use tokio::{net::TcpListener, task::JoinSet};
 
-async fn serve_file(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+async fn serve_file(
+    req: Request<Incoming>,
+) -> Result<Response<BoxBody<Bytes, Infallible>>, Infallible> {
     let path = match req.uri().path() {
         "/" => "static/index.html",
         path => &path[1..], // strip leading '/'
@@ -23,27 +29,50 @@ async fn serve_file(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 
             Ok(Response::builder()
                 .header("Content-Type", mime_type)
-                .body(Body::from(contents))
+                .body(Full::from(contents).boxed())
                 .unwrap())
         }
         Err(_) => Ok(Response::builder()
             .status(StatusCode::NOT_FOUND)
-            .body(Body::from("404 Not Found"))
+            .body(Full::new(Bytes::from("404 Not Found\n")).boxed())
             .unwrap()),
     }
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() {
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3001));
+async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    let listen_addr = SocketAddr::from(([127, 0, 0, 1], 3001));
+    let tcp_listener = TcpListener::bind(&listen_addr).await?;
+    println!("listening on http://{listen_addr}");
 
-    let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(serve_file)) });
+    let mut join_set = JoinSet::new();
+    loop {
+        let (stream, addr) = match tcp_listener.accept().await {
+            Ok(x) => x,
+            Err(e) => {
+                eprintln!("failed to accept connection: {e}");
+                continue;
+            }
+        };
 
-    let server = Server::bind(&addr).serve(make_svc);
+        let serve_connection = async move {
+            println!("handling a request from {addr}");
 
-    println!("Listening on http://{}", addr);
+            let result = Builder::new(TokioExecutor::new())
+                .serve_connection(TokioIo::new(stream), service_fn(serve_file))
+                .await;
 
-    if let Err(e) = server.await {
-        eprintln!("server error: {}", e);
+            if let Err(e) = result {
+                eprintln!("error serving {addr}: {e}");
+            }
+
+            println!("handled a request from {addr}");
+        };
+
+        join_set.spawn(serve_connection);
     }
+
+    // if let Err(e) = server.await {
+    //     eprintln!("server error: {}", e);
+    // }
 }

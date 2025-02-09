@@ -7,6 +7,9 @@ edition = "2021"
 resolver = "2"
 members = [".", "utils/html-solver"]
 
+[workspace.dependencies]
+tokio = "1.43.0"
+
 [dependencies]
 alloy = { version = "0.9.2", features = [
   "std",
@@ -21,11 +24,11 @@ arrayvec = "0.7.6"
 axum = { version = "0.8.1", features = ["http2"] }
 axum-client-ip = "0.7.0"
 axum-macros = "0.5.0"
-bdk_esplora = { version = "0.19.0", features = [
-  "async-https",
+bdk_esplora = { version = "0.20.1", features = [
   "async-https-rustls",
+  "tokio",
 ], default-features = false }
-bdk_wallet = { version = "1.0.0-beta.5", features = ["rusqlite"] }
+bdk_wallet = { version = "1.1.0", features = ["rusqlite"] }
 chrono = { version = "0.4.39", default-features = false, features = ["now"] }
 colored = "3.0.0"
 concurrent-map = "5.0.37"
@@ -37,7 +40,7 @@ serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"
 sha2 = { version = "0.10.8", features = ["asm", "loongarch64_asm"] }
 terrors = "0.3.2"
-tokio = { version = "1.41.0", features = [
+tokio = { workspace = true, features = [
   "macros",
   "net",
   "parking_lot",
