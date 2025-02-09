@@ -71,8 +71,4 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
 
         join_set.spawn(serve_connection);
     }
-
-    // if let Err(e) = server.await {
-    //     eprintln!("server error: {}", e);
-    // }
 }
