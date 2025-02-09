@@ -10,7 +10,7 @@ use std::{
 use arrayvec::ArrayVec;
 use concurrent_map::{CasFailure, ConcurrentMap};
 use parking_lot::{Mutex, MutexGuard};
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 use sha2::{Digest, Sha256};
 use terrors::OneOf;
 use tokio::time::sleep;
@@ -37,7 +37,7 @@ impl Challenge {
     /// Note that this doesn't support IPv6 yet because those IPs are a lot
     /// easier to get.
     pub fn get(ip: &Ipv4Addr) -> Self {
-        let nonce = thread_rng().gen();
+        let nonce = rng().random();
         let expires_at = Instant::now() + TTL;
         match nonce_set().cas(ip.to_bits(), None, Some((nonce, false))) {
             Ok(None) => {

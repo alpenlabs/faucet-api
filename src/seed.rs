@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 use tracing::info;
 
 use crate::settings::SETTINGS;
@@ -36,7 +36,7 @@ impl SavableSeed {
             }
             _ => {
                 info!("couldn't load seed, generating new one");
-                let me = Self(thread_rng().gen());
+                let me = Self(rng().random());
                 me.save()?;
                 Ok(me.0)
             }
