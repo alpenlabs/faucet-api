@@ -10,7 +10,6 @@ use alloy::{
         Identity, ProviderBuilder, RootProvider,
     },
     signers::local::PrivateKeySigner,
-    transports::http::{Client, Http},
 };
 use sha2::{Digest, Sha256};
 use tracing::info;
@@ -26,8 +25,7 @@ type Provider = FillProvider<
         >,
         WalletFiller<EthereumWallet>,
     >,
-    RootProvider<Http<Client>>,
-    Http<Client>,
+    RootProvider<Ethereum>,
     Ethereum,
 >;
 
@@ -68,15 +66,12 @@ impl L2Wallet {
             <EthereumWallet as NetworkWallet<Ethereum>>::default_signer_address(&wallet)
         );
 
-        let provider = ProviderBuilder::new()
-            .with_recommended_fillers()
-            .wallet(wallet)
-            .on_http(
-                SETTINGS
-                    .l2_http_endpoint
-                    .parse()
-                    .map_err(|_| L2EndpointParseError)?,
-            );
+        let provider = ProviderBuilder::new().wallet(wallet).on_http(
+            SETTINGS
+                .l2_http_endpoint
+                .parse()
+                .map_err(|_| L2EndpointParseError)?,
+        );
         Ok(Self(provider))
     }
 }
