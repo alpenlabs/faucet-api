@@ -17,7 +17,7 @@ def count_leading_zeros(data):
 
 # Find solution
 def find_solution(nonce, difficulty):
-    salt = bytes.fromhex("616c70656e206c616273206661756365742032303234")
+    salt = bytes.fromhex("737472617461206661756365742032303234")
     nonce = bytes.fromhex(nonce)
     solution = bytearray(8)
 

@@ -16,8 +16,7 @@ This will only fail if you call it over IPv6, where it will respond with a `503 
 As the client, you are challenged to then find a solution where:
 
 ```rs
-// b"alpen labs faucet 2024"
-let salt = 0x616c70656e206c616273206661756365742032303234;
+let salt = b"strata faucet 2024";
 // nonce is the 16 decoded bytes from the API
 // solution is a 8 byte array
 // `|` is representing concatenation
