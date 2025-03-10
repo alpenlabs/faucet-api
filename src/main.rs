@@ -94,8 +94,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/pow_challenge", get(get_pow_challenge))
-        .route("/claim_l1/:solution/:address", get(claim_l1))
-        .route("/claim_l2/:solution/:address", get(claim_l2))
+        .route("/claim_l1/{solution}/{address}", get(claim_l1))
+        .route("/claim_l2/{solution}/{address}", get(claim_l2))
         .route("/balance", get(get_balance))
         .layer(SETTINGS.ip_src.clone().into_extension())
         .with_state(state);
