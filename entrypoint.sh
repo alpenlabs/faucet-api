@@ -32,5 +32,6 @@ EOL
 echo "Generated faucet.toml:"
 cat /app/faucet.toml
 
+
 # Run the application with the generated config
-exec alpen-faucet --config /app/faucet.toml
+exec /usr/local/bin/alpen-faucet --config /app/faucet.toml
