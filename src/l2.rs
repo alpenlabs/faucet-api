@@ -11,7 +11,14 @@ use alloy::{
     },
     signers::local::PrivateKeySigner,
 };
-use sha2::{Digest, Sha256};
+use bdk_wallet::bitcoin::{
+                Network,
+                secp256k1::Secp256k1,
+                bip32::{DerivationPath,
+                    ChildNumber,
+                    Xpriv,
+                }
+            };
 use tracing::info;
 
 use crate::{seed::Seed, settings::SETTINGS};
@@ -50,21 +57,38 @@ pub struct L2EndpointParseError;
 
 impl L2Wallet {
     pub fn new(seed: &Seed) -> Result<Self, L2EndpointParseError> {
-        let l2_private_bytes = {
-            let mut hasher = Sha256::new();
-            hasher.update(b"alpen labs faucet l2 wallet 2024");
-            hasher.update(seed);
-            hasher.finalize()
-        };
+        let derivation_path = DerivationPath::master().extend(&[
+            // Purpose index for HD wallets.
+            ChildNumber::Hardened { index: 44 },
+            // Coin type index for Ethereum mainnet
+            ChildNumber::Hardened { index: 60 },
+            // Account index for user wallets.
+            ChildNumber::Hardened { index: 0 },
+            // Change index for receiving (external) addresses.
+            ChildNumber::Normal { index: 0 },
+            // Address index.
+            ChildNumber::Normal { index: 0 },
+        ]);
 
-        let signer = PrivateKeySigner::from_field_bytes(&l2_private_bytes).expect("valid slice");
+        // Network choice affects how extended public and private keys are serialized. See
+        // https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format.
+        // Given the popularity of MetaMask, we follow their example (they always hardcode mainnet)
+        // and hardcode Network::Bitcoin (mainnet) for EVM-based wallet.
+        let master_key = Xpriv::new_master(Network::Bitcoin, seed).expect("valid xpriv");
+
+        // Derive the child key for the given path
+        let derived_key = master_key.derive_priv(&Secp256k1::new(), &derivation_path).unwrap();
+        let signer =
+            PrivateKeySigner::from_slice(derived_key.private_key.secret_bytes().as_slice())
+                .expect("valid slice");
 
         let wallet = EthereumWallet::from(signer);
-
+    
         info!(
             "L2 faucet address: {}",
             <EthereumWallet as NetworkWallet<Ethereum>>::default_signer_address(&wallet)
         );
+
 
         let provider = ProviderBuilder::new().wallet(wallet).on_http(
             SETTINGS
