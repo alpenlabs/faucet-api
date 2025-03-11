@@ -121,9 +121,9 @@ async fn get_pow_challenge(
 ) -> Result<Json<PowChallenge>, (StatusCode, &'static str)> {
     let balance_str = get_balance(State(state)).await;
 
-    let balance_u64: u64 = balance_str.parse().map_err(|_| {
-        (StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse balance")
-    })?;
+    let balance_u64: u64 = balance_str
+        .parse()
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse balance"))?;
 
     if balance_u64 < SETTINGS.sats_per_claim.to_sat() {
         return Err((StatusCode::INTERNAL_SERVER_ERROR, "Insufficient funds"));
