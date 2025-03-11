@@ -118,7 +118,19 @@ pub struct PowChallenge {
 
 async fn get_pow_challenge(
     SecureClientIp(ip): SecureClientIp,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<PowChallenge>, (StatusCode, &'static str)> {
+    let balance = state
+        .l1_wallet
+        .read()
+        .balance()
+        .confirmed
+        .to_sat();
+
+    if balance < SETTINGS.sats_per_claim.to_sat() {
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, "Insufficient funds"));
+    }
+
     if let IpAddr::V4(ip) = ip {
         Ok(Json(PowChallenge {
             nonce: Hex(Challenge::get(&ip).nonce()),
