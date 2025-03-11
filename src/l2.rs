@@ -54,7 +54,7 @@ pub struct L2EndpointParseError;
 
 impl L2Wallet {
     pub fn new(seed: &Seed) -> Result<Self, L2EndpointParseError> {
-        let derivation_path = DerivationPath::master().extend(&[
+        let derivation_path = DerivationPath::master().extend([
             // Purpose index for HD wallets.
             ChildNumber::Hardened { index: 44 },
             // Coin type index for Ethereum mainnet
