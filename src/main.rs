@@ -97,7 +97,7 @@ async fn main() {
         .route("/claim_l1/{solution}/{address}", get(claim_l1))
         .route("/claim_l2/{solution}/{address}", get(claim_l2))
         .route("/balance", get(get_balance))
-        .route("/sats_to_claim/{level}", get(sats_to_claim))
+        .route("/sats_to_claim/{level}", get(get_sats_per_claim))
         .layer(SETTINGS.ip_src.clone().into_extension())
         .with_state(state);
 
@@ -232,7 +232,7 @@ async fn get_balance(State(state): State<Arc<AppState>>) -> String {
         .to_string()
 }
 
-async fn sats_to_claim(level: String) -> Result<String, (StatusCode, String)> {
+async fn get_sats_per_claim(level: String) -> Result<String, (StatusCode, String)> {
     let claim_level = ClaimLevel::try_from(level.as_str())?;
 
     let sats = match claim_level {
@@ -250,19 +250,19 @@ mod tests {
 
     #[test]
     async fn test_sats_to_claim_l1() {
-        let result = sats_to_claim("l1".to_string()).await;
+        let result = get_sats_per_claim("l1".to_string()).await;
         assert_eq!(result, Ok(SETTINGS.l1_sats_per_claim.to_sat().to_string()));
     }
 
     #[test]
     async fn test_sats_to_claim_l2() {
-        let result = sats_to_claim("l2".to_string()).await;
+        let result = get_sats_per_claim("l2".to_string()).await;
         assert_eq!(result, Ok(SETTINGS.l2_sats_per_claim.to_sat().to_string()));
     }
 
     #[test]
     async fn test_sats_to_claim_invalid() {
-        let result = sats_to_claim("invalid".to_string()).await;
+        let result = get_sats_per_claim("invalid".to_string()).await;
         assert_eq!(result, Err((StatusCode::BAD_REQUEST, "Invalid level. Must be 'l1' or 'l2'".to_string())));
     }
 }
