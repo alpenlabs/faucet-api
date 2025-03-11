@@ -48,8 +48,7 @@ pub struct InternalSettings {
     pub network: Option<Network>,
     pub esplora: String,
     pub l2_http_endpoint: String,
-    pub l1_sats_per_claim: Amount,
-    pub l2_sats_per_claim: Amount,
+    pub sats_per_claim: Amount,
     pub pow_difficulty: u8,
     pub batcher_period: Option<u64>,
     pub batcher_max_per_batch: Option<usize>,
@@ -68,8 +67,7 @@ pub struct Settings {
     pub network: Network,
     pub esplora: String,
     pub l2_http_endpoint: String,
-    pub l1_sats_per_claim: Amount,
-    pub l2_sats_per_claim: Amount,
+    pub sats_per_claim: Amount,
     pub pow_difficulty: u8,
     pub batcher: BatcherConfig,
 }
@@ -84,11 +82,8 @@ impl TryFrom<InternalSettings> for Settings {
     type Error = <PathBuf as FromStr>::Err;
 
     fn try_from(internal: InternalSettings) -> Result<Self, Self::Error> {
-        if internal.l1_sats_per_claim > MAX_SATS_PER_CLAIM {
-            panic!("L1 sats per claim is too high, max is {MAX_SATS_PER_CLAIM}");
-        }
-        if internal.l2_sats_per_claim > MAX_SATS_PER_CLAIM {
-            panic!("L2 sats per claim is too high, max is {MAX_SATS_PER_CLAIM}");
+        if internal.sats_per_claim > MAX_SATS_PER_CLAIM {
+            panic!("sats per claim is too high, max is {MAX_SATS_PER_CLAIM}");
         }
         Ok(Self {
             host: internal.host.unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
@@ -101,8 +96,7 @@ impl TryFrom<InternalSettings> for Settings {
             network: internal.network.unwrap_or(Network::Signet),
             esplora: internal.esplora,
             l2_http_endpoint: internal.l2_http_endpoint,
-            l1_sats_per_claim: internal.l1_sats_per_claim,
-            l2_sats_per_claim: internal.l2_sats_per_claim,
+            sats_per_claim: internal.sats_per_claim,
             pow_difficulty: internal.pow_difficulty,
             batcher: BatcherConfig {
                 period: Duration::from_secs(internal.batcher_period.unwrap_or(30)),
