@@ -12,13 +12,10 @@ use alloy::{
     signers::local::PrivateKeySigner,
 };
 use bdk_wallet::bitcoin::{
-                Network,
-                secp256k1::Secp256k1,
-                bip32::{DerivationPath,
-                    ChildNumber,
-                    Xpriv,
-                }
-            };
+    bip32::{ChildNumber, DerivationPath, Xpriv},
+    secp256k1::Secp256k1,
+    Network,
+};
 use tracing::info;
 
 use crate::{seed::Seed, settings::SETTINGS};
@@ -70,20 +67,23 @@ impl L2Wallet {
             ChildNumber::Normal { index: 0 },
         ]);
 
-        // Network choice affects how extended public and private keys are serialized. See
-        // https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format.
-        // Given the popularity of MetaMask, we follow their example (they always hardcode mainnet)
-        // and hardcode Network::Bitcoin (mainnet) for EVM-based wallet.
+        // Network choice affects how extended public and private keys are serialized.
+        // See https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format.
+        // Given the popularity of MetaMask, we follow their example (they always
+        // hardcode mainnet) and hardcode Network::Bitcoin (mainnet) for
+        // EVM-based wallet.
         let master_key = Xpriv::new_master(Network::Bitcoin, seed).expect("valid xpriv");
 
         // Derive the child key for the given path
-        let derived_key = master_key.derive_priv(&Secp256k1::new(), &derivation_path).unwrap();
+        let derived_key = master_key
+            .derive_priv(&Secp256k1::new(), &derivation_path)
+            .unwrap();
         let signer =
             PrivateKeySigner::from_slice(derived_key.private_key.secret_bytes().as_slice())
                 .expect("valid slice");
 
         let wallet = EthereumWallet::from(signer);
-    
+
         info!(
             "L2 faucet address: {}",
             <EthereumWallet as NetworkWallet<Ethereum>>::default_signer_address(&wallet)
