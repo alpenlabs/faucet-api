@@ -117,6 +117,24 @@ pub struct PowChallenge {
     difficulty: u8,
 }
 
+#[derive(Debug)]
+enum ClaimLevel {
+    L1,
+    L2,
+}
+
+impl TryFrom<&str> for ClaimLevel {
+    type Error = (StatusCode, String);
+
+    fn try_from(level: &str) -> Result<Self, Self::Error> {
+        match level {
+            "l1" => Ok(ClaimLevel::L1),
+            "l2" => Ok(ClaimLevel::L2),
+            _ => Err((StatusCode::BAD_REQUEST, "Invalid level. Must be 'l1' or 'l2'".to_string())),
+        }
+    }
+}
+
 async fn get_pow_challenge(
     SecureClientIp(ip): SecureClientIp,
 ) -> Result<Json<PowChallenge>, (StatusCode, &'static str)> {
@@ -158,7 +176,7 @@ async fn claim_l1(
         .batcher
         .queue_payout_request(PayoutRequest::L1(L1PayoutRequest {
             address,
-            amount: SETTINGS.sats_per_claim,
+            amount: SETTINGS.l1_sats_per_claim,
         }))
         .await
         .expect("successful queuing");
@@ -186,7 +204,7 @@ async fn claim_l2(
     let tx = TransactionRequest::default()
         .with_to(address)
         // 1 btc == 1 "eth" => 1 sat = 1e10 "wei"
-        .with_value(U256::from(SETTINGS.sats_per_claim.to_sat() * 10u64.pow(10)));
+        .with_value(U256::from(SETTINGS.l2_sats_per_claim.to_sat() * 10u64.pow(10)));
 
     let txid = match state.l2_wallet.send_transaction(tx).await {
         Ok(r) => *r.tx_hash(),
