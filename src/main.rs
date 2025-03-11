@@ -119,15 +119,21 @@ pub struct PowChallenge {
 async fn get_pow_challenge(
     SecureClientIp(ip): SecureClientIp,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<PowChallenge>, (StatusCode, &'static str)> {
+) -> Result<Json<PowChallenge>, (StatusCode, String)> {
     let balance_str = get_balance(State(state)).await;
 
-    let balance_u64: u64 = balance_str
-        .parse()
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse balance"))?;
+    let balance_u64: u64 = balance_str.parse().map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to parse balance".to_string(),
+        )
+    })?;
 
     if balance_u64 < SETTINGS.sats_per_claim.to_sat() {
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, "Insufficient funds"));
+        let need = SETTINGS.sats_per_claim.to_sat();
+        let has = balance_u64;
+        let error_string = format!("Insufficient funds. Has {}, needs {}.", has, need);
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
     }
 
     if let IpAddr::V4(ip) = ip {
@@ -136,7 +142,10 @@ async fn get_pow_challenge(
             difficulty: SETTINGS.pow_difficulty,
         }))
     } else {
-        Err((StatusCode::SERVICE_UNAVAILABLE, "IPV6 is not unavailable"))
+        Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "IPV6 is not unavailable".to_string(),
+        ))
     }
 }
 
