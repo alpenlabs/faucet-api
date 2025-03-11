@@ -97,6 +97,7 @@ async fn main() {
         .route("/claim_l1/{solution}/{address}", get(claim_l1))
         .route("/claim_l2/{solution}/{address}", get(claim_l2))
         .route("/balance", get(get_balance))
+        .route("/amount_per_claim", get(get_amount_per_claim))
         .layer(SETTINGS.ip_src.clone().into_extension())
         .with_state(state);
 
@@ -223,4 +224,8 @@ async fn get_balance(State(state): State<Arc<AppState>>) -> String {
         .confirmed
         .to_sat()
         .to_string()
+}
+
+async fn get_amount_per_claim() -> String {
+    SETTINGS.sats_per_claim.to_sat().to_string()
 }
