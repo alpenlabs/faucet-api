@@ -118,7 +118,6 @@ pub struct PowChallenge {
 
 async fn get_pow_challenge(
     SecureClientIp(ip): SecureClientIp,
-    State(state): State<Arc<AppState>>,
 ) -> Result<Json<PowChallenge>, (StatusCode, &'static str)> {
     let balance_str = get_balance(State(state)).await;
 
