@@ -117,6 +117,24 @@ pub struct PowChallenge {
     difficulty: u8,
 }
 
+#[derive(Debug)]
+enum ClaimLevel {
+    L1,
+    L2,
+}
+
+impl TryFrom<&str> for ClaimLevel {
+    type Error = (StatusCode, String);
+
+    fn try_from(level: &str) -> Result<Self, Self::Error> {
+        match level {
+            "l1" => Ok(ClaimLevel::L1),
+            "l2" => Ok(ClaimLevel::L2),
+            _ => Err((StatusCode::BAD_REQUEST, "Invalid level. Must be 'l1' or 'l2'".to_string())),
+        }
+    }
+}
+
 async fn get_pow_challenge(
     SecureClientIp(ip): SecureClientIp,
 ) -> Result<Json<PowChallenge>, (StatusCode, &'static str)> {
@@ -215,14 +233,12 @@ async fn get_balance(State(state): State<Arc<AppState>>) -> String {
 }
 
 async fn sats_to_claim(level: String) -> Result<String, (StatusCode, String)> {
-    if level == "l1" {
-        Ok(SETTINGS.l1_sats_per_claim.to_sat().to_string())
-    } else if level == "l2" {
-        Ok(SETTINGS.l2_sats_per_claim.to_sat().to_string())
-    } else {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "Invalid level. Must be l1 or l2".to_string(),
-        ));   
-    }
+    let claim_level = ClaimLevel::try_from(level.as_str())?;
+
+    let sats = match claim_level {
+        ClaimLevel::L1 => SETTINGS.l1_sats_per_claim.to_sat(),
+        ClaimLevel::L2 => SETTINGS.l2_sats_per_claim.to_sat(),
+    };
+
+    Ok(sats.to_string())
 }
