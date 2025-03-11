@@ -242,3 +242,27 @@ async fn sats_to_claim(level: String) -> Result<String, (StatusCode, String)> {
 
     Ok(sats.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::test;
+
+    #[test]
+    async fn test_sats_to_claim_l1() {
+        let result = sats_to_claim("l1".to_string()).await;
+        assert_eq!(result, Ok(SETTINGS.l1_sats_per_claim.to_sat().to_string()));
+    }
+
+    #[test]
+    async fn test_sats_to_claim_l2() {
+        let result = sats_to_claim("l2".to_string()).await;
+        assert_eq!(result, Ok(SETTINGS.l2_sats_per_claim.to_sat().to_string()));
+    }
+
+    #[test]
+    async fn test_sats_to_claim_invalid() {
+        let result = sats_to_claim("invalid".to_string()).await;
+        assert_eq!(result, Err((StatusCode::BAD_REQUEST, "Invalid level. Must be 'l1' or 'l2'".to_string())));
+    }
+}
