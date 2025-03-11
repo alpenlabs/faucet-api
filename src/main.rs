@@ -97,7 +97,7 @@ async fn main() {
         .route("/claim_l1/{solution}/{address}", get(claim_l1))
         .route("/claim_l2/{solution}/{address}", get(claim_l2))
         .route("/balance", get(get_balance))
-        .route("/amount_per_claim", get(get_amount_per_claim))
+        .route("/sats_to_claim/{level}", get(sats_to_claim))
         .layer(SETTINGS.ip_src.clone().into_extension())
         .with_state(state);
 
@@ -158,7 +158,7 @@ async fn claim_l1(
         .batcher
         .queue_payout_request(PayoutRequest::L1(L1PayoutRequest {
             address,
-            amount: SETTINGS.sats_per_claim,
+            amount: SETTINGS.l1_sats_per_claim,
         }))
         .await
         .expect("successful queuing");
@@ -186,7 +186,7 @@ async fn claim_l2(
     let tx = TransactionRequest::default()
         .with_to(address)
         // 1 btc == 1 "eth" => 1 sat = 1e10 "wei"
-        .with_value(U256::from(SETTINGS.sats_per_claim.to_sat() * 10u64.pow(10)));
+        .with_value(U256::from(SETTINGS.l2_sats_per_claim.to_sat() * 10u64.pow(10)));
 
     let txid = match state.l2_wallet.send_transaction(tx).await {
         Ok(r) => *r.tx_hash(),
@@ -214,6 +214,15 @@ async fn get_balance(State(state): State<Arc<AppState>>) -> String {
         .to_string()
 }
 
-async fn get_amount_per_claim() -> String {
-    SETTINGS.sats_per_claim.to_sat().to_string()
+async fn sats_to_claim(level: String) -> Result<String, (StatusCode, String)> {
+    if level == "l1" {
+        Ok(SETTINGS.l1_sats_per_claim.to_sat().to_string())
+    } else if level == "l2" {
+        Ok(SETTINGS.l2_sats_per_claim.to_sat().to_string())
+    } else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Invalid level. Must be l1 or l2".to_string(),
+        ));   
+    }
 }
