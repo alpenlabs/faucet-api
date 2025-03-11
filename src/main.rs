@@ -130,7 +130,10 @@ impl TryFrom<&str> for ClaimLevel {
         match level {
             "l1" => Ok(ClaimLevel::L1),
             "l2" => Ok(ClaimLevel::L2),
-            _ => Err((StatusCode::BAD_REQUEST, "Invalid level. Must be 'l1' or 'l2'".to_string())),
+            _ => Err((
+                StatusCode::BAD_REQUEST,
+                "Invalid level. Must be 'l1' or 'l2'".to_string(),
+            )),
         }
     }
 }
@@ -204,7 +207,9 @@ async fn claim_l2(
     let tx = TransactionRequest::default()
         .with_to(address)
         // 1 btc == 1 "eth" => 1 sat = 1e10 "wei"
-        .with_value(U256::from(SETTINGS.l2_sats_per_claim.to_sat() * 10u64.pow(10)));
+        .with_value(U256::from(
+            SETTINGS.l2_sats_per_claim.to_sat() * 10u64.pow(10),
+        ));
 
     let txid = match state.l2_wallet.send_transaction(tx).await {
         Ok(r) => *r.tx_hash(),
@@ -245,8 +250,9 @@ async fn get_sats_per_claim(Path(level): Path<String>) -> Result<String, (Status
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tokio::test;
+
+    use super::*;
 
     #[test]
     async fn test_sats_to_claim_l1() {
@@ -263,6 +269,12 @@ mod tests {
     #[test]
     async fn test_sats_to_claim_invalid() {
         let result = get_sats_per_claim(Path("invalid".to_string())).await;
-        assert_eq!(result, Err((StatusCode::BAD_REQUEST, "Invalid level. Must be 'l1' or 'l2'".to_string())));
+        assert_eq!(
+            result,
+            Err((
+                StatusCode::BAD_REQUEST,
+                "Invalid level. Must be 'l1' or 'l2'".to_string()
+            ))
+        );
     }
 }
