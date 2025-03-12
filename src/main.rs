@@ -93,11 +93,11 @@ async fn main() {
     });
 
     let app = Router::new()
-        .route("/pow_challenge", get(get_pow_challenge))
+        .route("/pow_challenge/{chain}", get(get_pow_challenge))
         .route("/claim_l1/{solution}/{address}", get(claim_l1))
         .route("/claim_l2/{solution}/{address}", get(claim_l2))
         .route("/balance", get(get_balance))
-        .route("/sats_to_claim/{level}", get(get_sats_per_claim))
+        .route("/sats_to_claim/{chain}", get(get_sats_per_claim))
         .layer(SETTINGS.ip_src.clone().into_extension())
         .with_state(state);
 
@@ -141,10 +141,17 @@ impl TryFrom<&str> for Chain {
 
 async fn get_pow_challenge(
     SecureClientIp(ip): SecureClientIp,
+    Path(chain): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<PowChallenge>, (StatusCode, String)> {
-    let balance_str = get_balance(State(state)).await;
+    let claim_level = Chain::try_from(chain.as_str())?;
 
+    let need = match claim_level {
+        Chain::L1 => SETTINGS.l1_sats_per_claim.to_sat(),
+        Chain::L2 => SETTINGS.l2_sats_per_claim.to_sat(),
+    };
+
+    let balance_str = get_balance(State(state)).await;
     let balance_u64: u64 = balance_str.parse().map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -153,7 +160,6 @@ async fn get_pow_challenge(
     })?;
 
     if balance_u64 < SETTINGS.l1_sats_per_claim.to_sat() {
-        let need = SETTINGS.l1_sats_per_claim.to_sat();
         let has = balance_u64;
         let error_string = format!("Insufficient funds. Has {}, needs {}.", has, need);
         return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
