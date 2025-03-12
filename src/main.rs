@@ -152,8 +152,8 @@ async fn get_pow_challenge(
         )
     })?;
 
-    if balance_u64 < SETTINGS.sats_per_claim.to_sat() {
-        let need = SETTINGS.sats_per_claim.to_sat();
+    if balance_u64 < SETTINGS.l1_sats_per_claim.to_sat() {
+        let need = SETTINGS.l1_sats_per_claim.to_sat();
         let has = balance_u64;
         let error_string = format!("Insufficient funds. Has {}, needs {}.", has, need);
         return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
