@@ -117,19 +117,20 @@ pub struct PowChallenge {
     difficulty: u8,
 }
 
+/// Chain: L1 for Bitcoin. L2 for Strata.
 #[derive(Debug)]
-enum ClaimLevel {
+enum Chain {
     L1,
     L2,
 }
 
-impl TryFrom<&str> for ClaimLevel {
+impl TryFrom<&str> for Chain {
     type Error = (StatusCode, String);
 
     fn try_from(level: &str) -> Result<Self, Self::Error> {
         match level {
-            "l1" => Ok(ClaimLevel::L1),
-            "l2" => Ok(ClaimLevel::L2),
+            "l1" => Ok(Chain::L1),
+            "l2" => Ok(Chain::L2),
             _ => Err((
                 StatusCode::BAD_REQUEST,
                 "Invalid level. Must be 'l1' or 'l2'".to_string(),
@@ -237,12 +238,12 @@ async fn get_balance(State(state): State<Arc<AppState>>) -> String {
         .to_string()
 }
 
-async fn get_sats_per_claim(Path(level): Path<String>) -> Result<String, (StatusCode, String)> {
-    let claim_level = ClaimLevel::try_from(level.as_str())?;
+async fn get_sats_per_claim(Path(chain): Path<String>) -> Result<String, (StatusCode, String)> {
+    let claim_level = Chain::try_from(chain.as_str())?;
 
     let sats = match claim_level {
-        ClaimLevel::L1 => SETTINGS.l1_sats_per_claim.to_sat(),
-        ClaimLevel::L2 => SETTINGS.l2_sats_per_claim.to_sat(),
+        Chain::L1 => SETTINGS.l1_sats_per_claim.to_sat(),
+        Chain::L2 => SETTINGS.l2_sats_per_claim.to_sat(),
     };
 
     Ok(sats.to_string())
