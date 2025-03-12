@@ -43,12 +43,12 @@ pub struct BatcherConfig {
     ///
     /// Defaults to `30` seconds.
     pub period: Duration,
-    
+
     /// Maximum number of transactions to batch per batching period.
     ///
     /// Defaults to `250`.
     pub max_per_tx: usize,
-    
+
     /// Maximum number of requests to allow in memory at a time.
     ///
     /// Defaults to `2_500`.

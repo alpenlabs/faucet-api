@@ -123,9 +123,9 @@ async fn get_pow_challenge(
 ) -> Result<Json<ProvidedChallenge>, (StatusCode, &'static str)> {
     if let IpAddr::V4(ip) = ip {
         let difficulty = pow::calculate_difficulty(
+            state.l1_wallet.read().balance().confirmed.to_btc() as f32,
             u8::MAX as f32,
             SETTINGS.pow.min_difficulty as f32,
-            state.l1_wallet.read().balance().confirmed.to_btc() as f32,
             SETTINGS.pow.min_balance.to_btc() as f32,
             SETTINGS.sats_per_claim.to_btc() as f32,
         ) as u8;

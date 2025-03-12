@@ -358,9 +358,9 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
 ///
 /// where:
 ///
+/// - `x` is the current balance in BTC
 /// - `M` is the maximum difficulty
 /// - `m` is the minimum difficulty
-/// - `x` is the current balance in BTC
 /// - `b` is the minimum balance in BTC
 /// - `q` is the amount emitted per request in BTC
 ///
@@ -377,11 +377,173 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
 ///   functions
 /// - `min_difficulty` <= `max_difficulty`
 /// - `max_difficulty`, `min_difficulty`, `balance`, `min_balance` and `x` all > 0
-pub fn calculate_difficulty(big_m: f32, m: f32, x: f32, b: f32, q: f32) -> f32 {
+pub fn calculate_difficulty(x: f32, big_m: f32, m: f32, b: f32, q: f32) -> f32 {
     // optimisation for when the balance is less than or equal to the min balance
     if x <= b {
+        println!("Returning big m");
         return big_m;
     }
+    println!("Not returning big m");
 
-    ((big_m - m) * (1.0 - (x / b).log(q)) + b).clamp(m, big_m)
+    let v = (big_m - m) * (1.0 - (x / b).log(q)) + m;
+    println!("Unclamped {}", v);
+
+    v.clamp(m, big_m)
+}
+
+#[cfg(test)]
+mod tests {
+    use approx::assert_relative_eq;
+
+    use super::*;
+
+    /// Test for expected function values at sampled points for given parameters.
+    /// The points are sampled such that it covers the clamped range as well as the
+    /// range where the function's behavior is normal.
+    #[test]
+    fn test_function() {
+        let big_m = 255.0;
+        let q = 15.0;
+        let b = 70.0;
+        let m = 16.0;
+
+        let expected_points = [
+            // At min balance and lesser, difficulty should be max.
+            (45.0, big_m),
+            (60.03, big_m),
+            (70.0, big_m),
+            // Between the clamped points the function should behave normal.
+            (71.0, 253.74813),
+            (103.0, 220.9128),
+            (201.0, 161.90737),
+            (327.0, 118.95743),
+            (600.0, 65.38911),
+            (800.0, 39.99963),
+            (960.0, 23.908766),
+            (1043.0, 16.590347),
+            (1049.96, 16.00336),
+            // Beyond certain point, the difficulty should always be minimum.
+            (1050.0, m),
+            (1050.0001, m),
+            (1080.0, m),
+            (1950.0, m),
+            (99950.0, m),
+        ];
+
+        for (x, exp_y) in expected_points {
+            let y = calculate_difficulty(x, big_m, m, b, q);
+            println!("{x}, {y}, {exp_y}");
+            assert_relative_eq!(y, exp_y, epsilon = f32::EPSILON);
+        }
+    }
+
+    // More general tests
+
+    /// Tests the calculation at a reasonable balance value.
+    #[test]
+    fn test_calculate_difficulty_normal() {
+        let balance = 5.0;
+        let big_m = 256.0;
+        let m = 2.0;
+        let min_bal = 1.0;
+        let q = 2.0;
+
+        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
+        assert!(difficulty >= m && difficulty <= big_m);
+    }
+
+    /// Tests when the balance is less than or equal to the minimum balance. The pow should be max.
+    #[test]
+    fn test_calculate_difficulty_min_balance() {
+        let min_bal = 1.0;
+        let balance = min_bal; // balance equals min_balance
+        let big_m = 256.0;
+        let m = 2.0;
+        let q = 2.0;
+
+        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
+        assert_eq!(difficulty, big_m);
+
+        let balance = min_bal - 0.1; // balance less than min_balance
+        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
+        assert_eq!(difficulty, big_m);
+    }
+
+    /// Tests when the balance is zero. The pow should be max.
+    #[test]
+    fn test_calculate_difficulty_zero_balance() {
+        let min_bal = 1.0;
+        let balance = 0.0; // zero balance
+        let big_m = 256.0;
+        let m = 2.0;
+        let q = 2.0;
+
+        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
+        assert_eq!(difficulty, big_m);
+    }
+
+    /// Tests when the balance is slightly greater than the minimum balance.
+    #[test]
+    fn test_calculate_difficulty_slightly_above_min_balance() {
+        let min_bal = 1.0;
+        let balance = 1.1;
+        let big_m = 256.0;
+        let m = 2.0;
+        let q = 2.0;
+
+        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
+        assert!(difficulty < big_m && difficulty >= m);
+    }
+
+    /// Tests when the balance is much larger than the minimum balance.
+    #[test]
+    fn test_calculate_difficulty_large_balance() {
+        let balance = 100.0;
+        let big_m = 256.0;
+        let m = 2.0;
+        let min_bal = 1.0;
+        let q = 2.0;
+
+        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
+        assert!(difficulty >= m && difficulty <= big_m);
+    }
+
+    /// Tests when the balance is extremely large, ensuring difficulty is still clamped correctly.
+    #[test]
+    fn test_calculate_difficulty_extreme_balance() {
+        let balance = 1_000_000.0; // Extremely high balance
+        let big_m = 256.0;
+        let m = 2.0;
+        let min_bal = 1.0;
+        let q = 2.0;
+
+        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
+        assert!(difficulty >= m && difficulty <= big_m);
+    }
+
+    /// Tests when `min_difficulty` and `max_difficulty` are equal.
+    #[test]
+    fn test_calculate_difficulty_same_min_max() {
+        let balance = 10.0;
+        let big_m = 5.0;
+        let m = 5.0; // min_difficulty == max_difficulty
+        let min_bal = 1.0;
+        let q = 2.0;
+
+        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
+        assert_eq!(difficulty, 5.0);
+    }
+
+    /// Tests when the emission per request is large.
+    #[test]
+    fn test_calculate_difficulty_large_emission() {
+        let balance = 50.0;
+        let big_m = 256.0;
+        let m = 2.0;
+        let min_bal = 1.0;
+        let q = 10.0; // Large emission
+
+        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
+        assert!(difficulty >= m && difficulty <= big_m);
+    }
 }
