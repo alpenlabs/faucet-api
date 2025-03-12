@@ -9,6 +9,7 @@ use axum_client_ip::SecureClientIpSource;
 use bdk_wallet::bitcoin::{Amount, Network};
 use config::Config;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use crate::{batcher::BatcherConfig, pow::PowConfig, CRATE_NAME};
 
@@ -86,25 +87,41 @@ pub struct Settings {
 // so this is a safety check.
 const MAX_SATS_PER_CLAIM: Amount = Amount::from_sat(u64::MAX / 10u64.pow(10));
 
+#[derive(Debug)]
+pub enum SettingsError {
+    /// `sats_per_claim` is too high.
+    TooHighSatsPerClaim,
+    /// `sats_per_claim` is too low.
+    TooLowSatsPerClaim,
+    /// Invalid seed path.
+    InvalidSeedPath(String),
+    /// Invalid database path.
+    InvalidDatabasePath(String),
+}
+
 impl TryFrom<InternalSettings> for Settings {
-    type Error = <PathBuf as FromStr>::Err;
+    type Error = SettingsError;
 
     fn try_from(internal: InternalSettings) -> Result<Self, Self::Error> {
         if internal.sats_per_claim > MAX_SATS_PER_CLAIM {
-            panic!("sats per claim is too high, max is {MAX_SATS_PER_CLAIM}");
+            warn!("sats per claim is too high, max is {MAX_SATS_PER_CLAIM}");
+            return Err(SettingsError::TooHighSatsPerClaim);
         }
-        if (internal.sats_per_claim > Amount::ONE_BTC) == false {
-            panic!("sats per claim is too low, must be greater than 1 BTC");
+        if internal.sats_per_claim <= Amount::ONE_BTC {
+            warn!("sats per claim is too low, must be greater than 1 BTC");
+            return Err(SettingsError::TooLowSatsPerClaim);
         }
 
         Ok(Self {
             host: internal.host.unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
             port: internal.port.unwrap_or(3000),
             ip_src: internal.ip_src,
-            seed_file: PathBuf::from_str(&internal.seed_file.unwrap_or("faucet.seed".to_owned()))?,
+            seed_file: PathBuf::from_str(&internal.seed_file.unwrap_or("faucet.seed".to_owned()))
+                .map_err(|e| SettingsError::InvalidSeedPath(e.to_string()))?,
             sqlite_file: PathBuf::from_str(
                 &internal.sqlite_file.unwrap_or("faucet.sqlite".to_owned()),
-            )?,
+            )
+            .map_err(|e| SettingsError::InvalidDatabasePath(e.to_string()))?,
             network: internal.network.unwrap_or(Network::Signet),
             esplora: internal.esplora,
             l2_http_endpoint: internal.l2_http_endpoint,

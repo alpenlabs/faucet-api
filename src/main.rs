@@ -14,7 +14,6 @@ use std::{
     env,
     net::{IpAddr, SocketAddr},
     sync::{Arc, LazyLock},
-    u8,
 };
 
 use alloy::{

@@ -353,7 +353,9 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
 /// is:
 ///
 /// ```math
-/// f(x)=(M-m)(1-\log_{q}\frac{x}{b})+m
+/// f_unclamped(x)=(M-m)(1-\log_{q}\frac{x}{b})+m
+/// f_clamped(x) = \max(m,\min(M,f_unclamped(x)))
+/// f(x) = f_clamped(x)
 /// ```
 ///
 /// where:
@@ -376,19 +378,21 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
 /// - `per_emission` > `Amount::ONE_BTC`, ideally >2 BTC due to the way the curve
 ///   functions
 /// - `min_difficulty` <= `max_difficulty`
-/// - `max_difficulty`, `min_difficulty`, `balance`, `min_balance` and `x` all > 0
+/// - `max_difficulty`, `min_difficulty`, `min_balance`, `q` and `x` all > 0
+///
+/// # Expected clamping points
+///
+/// f(x) = M at x = b
+/// f(x) = m at x = bq.
 pub fn calculate_difficulty(x: f32, big_m: f32, m: f32, b: f32, q: f32) -> f32 {
     // optimisation for when the balance is less than or equal to the min balance
     if x <= b {
-        println!("Returning big m");
         return big_m;
     }
-    println!("Not returning big m");
 
-    let v = (big_m - m) * (1.0 - (x / b).log(q)) + m;
-    println!("Unclamped {}", v);
+    let fval = (big_m - m) * (1.0 - (x / b).log(q)) + m;
 
-    v.clamp(m, big_m)
+    fval.clamp(m, big_m)
 }
 
 #[cfg(test)]
@@ -399,7 +403,7 @@ mod tests {
 
     /// Test for expected function values at sampled points for given parameters.
     /// The points are sampled such that it covers the clamped range as well as the
-    /// range where the function's behavior is normal.
+    /// range where the function's behavior is as expected.
     #[test]
     fn test_function() {
         let big_m = 255.0;
@@ -412,7 +416,7 @@ mod tests {
             (45.0, big_m),
             (60.03, big_m),
             (70.0, big_m),
-            // Between the clamped points the function should behave normal.
+            // Between the clamped points the function should behave as expected.
             (71.0, 253.74813),
             (103.0, 220.9128),
             (201.0, 161.90737),
@@ -432,7 +436,6 @@ mod tests {
 
         for (x, exp_y) in expected_points {
             let y = calculate_difficulty(x, big_m, m, b, q);
-            println!("{x}, {y}, {exp_y}");
             assert_relative_eq!(y, exp_y, epsilon = f32::EPSILON);
         }
     }
@@ -441,7 +444,7 @@ mod tests {
 
     /// Tests the calculation at a reasonable balance value.
     #[test]
-    fn test_calculate_difficulty_normal() {
+    fn test_calculate_difficulty_expected() {
         let balance = 5.0;
         let big_m = 256.0;
         let m = 2.0;
