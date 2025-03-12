@@ -294,7 +294,7 @@ mod tests {
             result,
             Err((
                 StatusCode::BAD_REQUEST,
-                "Invalid level. Must be 'l1' or 'l2'".to_string()
+                "Invalid chain. Must be 'l1' or 'l2'".to_string()
             ))
         );
     }
