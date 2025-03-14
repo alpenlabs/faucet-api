@@ -117,7 +117,7 @@ pub struct PowChallenge {
     difficulty: u8,
 }
 
-/// Chain: L1 for Bitcoin. L2 for Strata.
+/// Which chain the faucet is reasoning about.
 #[derive(Debug)]
 enum Chain {
     L1,
