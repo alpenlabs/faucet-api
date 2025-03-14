@@ -93,10 +93,11 @@ async fn main() {
     });
 
     let app = Router::new()
-        .route("/pow_challenge", get(get_pow_challenge))
+        .route("/pow_challenge/{chain}", get(get_pow_challenge))
         .route("/claim_l1/{solution}/{address}", get(claim_l1))
         .route("/claim_l2/{solution}/{address}", get(claim_l2))
         .route("/balance", get(get_balance))
+        .route("/sats_to_claim/{chain}", get(get_sats_per_claim))
         .layer(SETTINGS.ip_src.clone().into_extension())
         .with_state(state);
 
@@ -116,12 +117,41 @@ pub struct PowChallenge {
     difficulty: u8,
 }
 
+/// Which chain the faucet is reasoning about.
+#[derive(Debug)]
+enum Chain {
+    L1,
+    L2,
+}
+
+impl TryFrom<&str> for Chain {
+    type Error = (StatusCode, String);
+
+    fn try_from(level: &str) -> Result<Self, Self::Error> {
+        match level {
+            "l1" => Ok(Chain::L1),
+            "l2" => Ok(Chain::L2),
+            _ => Err((
+                StatusCode::BAD_REQUEST,
+                "Invalid chain. Must be 'l1' or 'l2'".to_string(),
+            )),
+        }
+    }
+}
+
 async fn get_pow_challenge(
     SecureClientIp(ip): SecureClientIp,
+    Path(chain): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<PowChallenge>, (StatusCode, String)> {
-    let balance_str = get_balance(State(state)).await;
+    let claim_level = Chain::try_from(chain.as_str())?;
 
+    let need = match claim_level {
+        Chain::L1 => SETTINGS.l1_sats_per_claim.to_sat(),
+        Chain::L2 => SETTINGS.l2_sats_per_claim.to_sat(),
+    };
+
+    let balance_str = get_balance(State(state)).await;
     let balance_u64: u64 = balance_str.parse().map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -129,8 +159,7 @@ async fn get_pow_challenge(
         )
     })?;
 
-    if balance_u64 < SETTINGS.sats_per_claim.to_sat() {
-        let need = SETTINGS.sats_per_claim.to_sat();
+    if balance_u64 < SETTINGS.l1_sats_per_claim.to_sat() {
         let has = balance_u64;
         let error_string = format!("Insufficient funds. Has {}, needs {}.", has, need);
         return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
@@ -177,7 +206,7 @@ async fn claim_l1(
         .batcher
         .queue_payout_request(PayoutRequest::L1(L1PayoutRequest {
             address,
-            amount: SETTINGS.sats_per_claim,
+            amount: SETTINGS.l1_sats_per_claim,
         }))
         .await
         .expect("successful queuing");
@@ -205,7 +234,9 @@ async fn claim_l2(
     let tx = TransactionRequest::default()
         .with_to(address)
         // 1 btc == 1 "eth" => 1 sat = 1e10 "wei"
-        .with_value(U256::from(SETTINGS.sats_per_claim.to_sat() * 10u64.pow(10)));
+        .with_value(U256::from(
+            SETTINGS.l2_sats_per_claim.to_sat() * 10u64.pow(10),
+        ));
 
     let txid = match state.l2_wallet.send_transaction(tx).await {
         Ok(r) => *r.tx_hash(),
@@ -231,4 +262,46 @@ async fn get_balance(State(state): State<Arc<AppState>>) -> String {
         .confirmed
         .to_sat()
         .to_string()
+}
+
+async fn get_sats_per_claim(Path(chain): Path<String>) -> Result<String, (StatusCode, String)> {
+    let claim_level = Chain::try_from(chain.as_str())?;
+
+    let sats = match claim_level {
+        Chain::L1 => SETTINGS.l1_sats_per_claim.to_sat(),
+        Chain::L2 => SETTINGS.l2_sats_per_claim.to_sat(),
+    };
+
+    Ok(sats.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::test;
+
+    use super::*;
+
+    #[test]
+    async fn test_sats_to_claim_l1() {
+        let result = get_sats_per_claim(Path("l1".to_string())).await;
+        assert_eq!(result, Ok(SETTINGS.l1_sats_per_claim.to_sat().to_string()));
+    }
+
+    #[test]
+    async fn test_sats_to_claim_l2() {
+        let result = get_sats_per_claim(Path("l2".to_string())).await;
+        assert_eq!(result, Ok(SETTINGS.l2_sats_per_claim.to_sat().to_string()));
+    }
+
+    #[test]
+    async fn test_sats_to_claim_invalid() {
+        let result = get_sats_per_claim(Path("invalid".to_string())).await;
+        assert_eq!(
+            result,
+            Err((
+                StatusCode::BAD_REQUEST,
+                "Invalid chain. Must be 'l1' or 'l2'".to_string()
+            ))
+        );
+    }
 }
