@@ -391,7 +391,6 @@ pub fn calculate_difficulty(x: f32, big_m: f32, m: f32, b: f32, q: f32) -> f32 {
     }
 
     let fval = (big_m - m) * (1.0 - (x / b).log(q)) + m;
-
     fval.clamp(m, big_m)
 }
 
@@ -548,5 +547,18 @@ mod tests {
 
         let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
         assert!(difficulty >= m && difficulty <= big_m);
+    }
+
+    /// Test zero minimum balance(b).
+    #[test]
+    fn test_calculate_difficulty_zero_min_bal() {
+        let balance = 50.0;
+        let big_m = 256.0;
+        let m = 2.0;
+        let min_bal = 0.0;
+        let q = 10.0;
+
+        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
+        assert_eq!(difficulty, m);
     }
 }
