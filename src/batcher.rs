@@ -4,6 +4,7 @@ use bdk_wallet::bitcoin::{self, Amount};
 use chrono::Utc;
 use kanal::{unbounded_async, AsyncSender, SendError};
 use parking_lot::{RwLock, RwLockWriteGuard};
+use serde::{Deserialize, Serialize};
 use terrors::OneOf;
 use tokio::{
     select, spawn,
@@ -36,11 +37,32 @@ pub struct BatcherNotStarted;
 #[allow(dead_code)]
 pub struct BatcherNotAvailable(SendError);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BatcherConfig {
+    /// How long the period for transaction batching is.
+    ///
+    /// Defaults to `30` seconds.
     pub period: Duration,
+
+    /// Maximum number of transactions to batch per batching period.
+    ///
+    /// Defaults to `250`.
     pub max_per_tx: usize,
+
+    /// Maximum number of requests to allow in memory at a time.
+    ///
+    /// Defaults to `2_500`.
     pub max_in_flight: usize,
+}
+
+impl Default for BatcherConfig {
+    fn default() -> Self {
+        Self {
+            period: Duration::from_secs(30),
+            max_per_tx: 250,
+            max_in_flight: 2500,
+        }
+    }
 }
 
 impl Batcher {

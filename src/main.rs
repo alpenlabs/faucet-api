@@ -111,7 +111,7 @@ async fn main() {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct PowChallenge {
+pub struct ProvidedChallenge {
     nonce: Hex<Nonce>,
     difficulty: u8,
 }
@@ -119,32 +119,24 @@ pub struct PowChallenge {
 async fn get_pow_challenge(
     SecureClientIp(ip): SecureClientIp,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<PowChallenge>, (StatusCode, String)> {
-    let balance_str = get_balance(State(state)).await;
-
-    let balance_u64: u64 = balance_str.parse().map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to parse balance".to_string(),
-        )
-    })?;
-
-    if balance_u64 < SETTINGS.sats_per_claim.to_sat() {
-        let need = SETTINGS.sats_per_claim.to_sat();
-        let has = balance_u64;
-        let error_string = format!("Insufficient funds. Has {}, needs {}.", has, need);
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
-    }
-
+) -> Result<Json<ProvidedChallenge>, (StatusCode, &'static str)> {
     if let IpAddr::V4(ip) = ip {
-        Ok(Json(PowChallenge {
-            nonce: Hex(Challenge::get(&ip).nonce()),
-            difficulty: SETTINGS.pow_difficulty,
+        let difficulty = pow::calculate_difficulty(
+            state.l1_wallet.read().balance().confirmed.to_btc() as f32,
+            u8::MAX as f32,
+            SETTINGS.pow.min_difficulty as f32,
+            SETTINGS.pow.min_balance.to_btc() as f32,
+            SETTINGS.sats_per_claim.to_btc() as f32,
+        ) as u8;
+        let challenge = Challenge::get(&ip, difficulty);
+        Ok(Json(ProvidedChallenge {
+            nonce: Hex(challenge.nonce()),
+            difficulty: challenge.difficulty(),
         }))
     } else {
         Err((
             StatusCode::SERVICE_UNAVAILABLE,
-            "IPV6 is not unavailable".to_string(),
+            "IPV6 is not supported at the moment",
         ))
     }
 }
@@ -157,12 +149,12 @@ async fn claim_l1(
     let IpAddr::V4(ip) = ip else {
         return Err((
             StatusCode::BAD_REQUEST,
-            "IPV6 is not unavailable".to_string(),
+            "IPV6 is not supported at this time".to_string(),
         ));
     };
 
     // num hashes on average to solve challenge: 2^15
-    if let Err(e) = Challenge::valid(&ip, SETTINGS.pow_difficulty, solution.0) {
+    if let Err(e) = Challenge::check_solution(&ip, solution.0) {
         return Err((StatusCode::BAD_REQUEST, format!("{e:?}")));
     }
 
@@ -198,7 +190,7 @@ async fn claim_l2(
     };
 
     // num hashes on average to solve challenge: 2^15
-    if let Err(e) = Challenge::valid(&ip, SETTINGS.pow_difficulty, solution.0) {
+    if let Err(e) = Challenge::check_solution(&ip, solution.0) {
         return Err((StatusCode::BAD_REQUEST, format!("{e:?}")));
     }
 
