@@ -2,7 +2,6 @@
 //! to generate and dispense bitcoin.
 
 mod batcher;
-pub mod hex;
 pub mod l1;
 pub mod l2;
 pub mod macros;
@@ -34,7 +33,6 @@ use bdk_wallet::{
     bitcoin::{address::NetworkUnchecked, Address as L1Address},
     KeychainKind,
 };
-use hex::Hex;
 use l1::{L1Wallet, Persister};
 use l2::L2Wallet;
 use parking_lot::RwLock;
@@ -42,6 +40,7 @@ use pow::{Challenge, Nonce, Solution};
 use seed::SavableSeed;
 use serde::{Deserialize, Serialize};
 use settings::SETTINGS;
+use shrex::Hex;
 use tokio::net::TcpListener;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
@@ -151,17 +150,10 @@ async fn get_pow_challenge(
         Chain::L2 => SETTINGS.l2_sats_per_claim.to_sat(),
     };
 
-    let balance_str = get_balance(State(state.clone())).await;
-    let balance_u64: u64 = balance_str.parse().map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to parse balance".to_string(),
-        )
-    })?;
+    let l1_balance = state.l1_wallet.read().balance().confirmed.to_sat();
 
-    if balance_u64 < SETTINGS.l1_sats_per_claim.to_sat() {
-        let has = balance_u64;
-        let error_string = format!("Insufficient funds. Has {}, needs {}.", has, need);
+    if l1_balance < SETTINGS.l1_sats_per_claim.to_sat() {
+        let error_string = format!("Insufficient funds. Has {l1_balance}, needs {need}.");
         return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
     }
 
