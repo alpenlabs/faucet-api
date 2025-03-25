@@ -3,7 +3,6 @@ use std::{
     path::PathBuf,
     str::FromStr,
     sync::LazyLock,
-    time::Duration,
 };
 
 use axum_client_ip::SecureClientIpSource;
@@ -11,7 +10,7 @@ use bdk_wallet::bitcoin::{Amount, Network};
 use config::Config;
 use serde::{Deserialize, Serialize};
 
-use crate::{batcher::BatcherConfig, CRATE_NAME};
+use crate::{batcher::BatcherConfig, pow::PowConfig, CRATE_NAME};
 
 pub static SETTINGS: LazyLock<Settings> = LazyLock::new(|| {
     let args = std::env::args().collect::<Vec<_>>();
@@ -40,20 +39,28 @@ pub static SETTINGS: LazyLock<Settings> = LazyLock::new(|| {
 
 #[derive(Serialize, Deserialize)]
 pub struct InternalSettings {
+    /// Host to listen for HTTP requests on
     pub host: Option<IpAddr>,
+    /// Port to listen for HTTP requests on
     pub port: Option<u16>,
+    /// How the server should determine the client's IP address
     pub ip_src: SecureClientIpSource,
+    /// Path to the seed file which stores the wallet's seed/master bytes
     pub seed_file: Option<String>,
+    /// Path to the SQLite database file which stores the wallet's data
     pub sqlite_file: Option<String>,
+    /// Network to use for the wallet. Defaults to [`Network::Signet`]
     pub network: Option<Network>,
+    /// URL of the esplora API to use for the wallet. Should not have a trailing slash
     pub esplora: String,
+    /// URL of the EVM L2 HTTP endpoint to use for the wallet. Should not have a trailing slash
     pub l2_http_endpoint: String,
     pub l1_sats_per_claim: Amount,
     pub l2_sats_per_claim: Amount,
-    pub pow_difficulty: u8,
-    pub batcher_period: Option<u64>,
-    pub batcher_max_per_batch: Option<usize>,
-    pub batcher_max_in_flight: Option<usize>,
+    /// Transaction batching configuration
+    pub batcher: Option<BatcherConfig>,
+    /// POW configuration
+    pub pow: Option<PowConfig>,
 }
 
 #[derive(Debug)]
@@ -70,8 +77,8 @@ pub struct Settings {
     pub l2_http_endpoint: String,
     pub l1_sats_per_claim: Amount,
     pub l2_sats_per_claim: Amount,
-    pub pow_difficulty: u8,
     pub batcher: BatcherConfig,
+    pub pow: PowConfig,
 }
 
 // on L2, we represent 1 btc as 1 "eth" on the rollup
@@ -80,8 +87,20 @@ pub struct Settings {
 // so this is a safety check.
 const MAX_SATS_PER_CLAIM: Amount = Amount::from_sat(u64::MAX / 10u64.pow(10));
 
+#[derive(Debug)]
+pub enum SettingsError {
+    /// `sats_per_claim` is too high.
+    TooHighSatsPerClaim,
+    /// `sats_per_claim` is too low.
+    TooLowSatsPerClaim,
+    /// Invalid seed path.
+    InvalidSeedPath(String),
+    /// Invalid database path.
+    InvalidDatabasePath(String),
+}
+
 impl TryFrom<InternalSettings> for Settings {
-    type Error = <PathBuf as FromStr>::Err;
+    type Error = SettingsError;
 
     fn try_from(internal: InternalSettings) -> Result<Self, Self::Error> {
         if internal.l1_sats_per_claim > MAX_SATS_PER_CLAIM {
@@ -90,25 +109,27 @@ impl TryFrom<InternalSettings> for Settings {
         if internal.l2_sats_per_claim > MAX_SATS_PER_CLAIM {
             panic!("L2 sats per claim is too high, max is {MAX_SATS_PER_CLAIM}");
         }
+
         Ok(Self {
             host: internal.host.unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
             port: internal.port.unwrap_or(3000),
             ip_src: internal.ip_src,
-            seed_file: PathBuf::from_str(&internal.seed_file.unwrap_or("faucet.seed".to_owned()))?,
+            seed_file: PathBuf::from_str(&internal.seed_file.unwrap_or("faucet.seed".to_owned()))
+                .map_err(|e| SettingsError::InvalidSeedPath(e.to_string()))?,
             sqlite_file: PathBuf::from_str(
                 &internal.sqlite_file.unwrap_or("faucet.sqlite".to_owned()),
-            )?,
+            )
+            .map_err(|e| SettingsError::InvalidDatabasePath(e.to_string()))?,
             network: internal.network.unwrap_or(Network::Signet),
             esplora: internal.esplora,
             l2_http_endpoint: internal.l2_http_endpoint,
             l1_sats_per_claim: internal.l1_sats_per_claim,
             l2_sats_per_claim: internal.l2_sats_per_claim,
-            pow_difficulty: internal.pow_difficulty,
-            batcher: BatcherConfig {
-                period: Duration::from_secs(internal.batcher_period.unwrap_or(30)),
-                max_per_tx: internal.batcher_max_per_batch.unwrap_or(250),
-                max_in_flight: internal.batcher_max_in_flight.unwrap_or(2500),
-            },
+            batcher: internal.batcher.unwrap_or_default(),
+            pow: internal
+                .pow
+                .inspect(|c| c.validate().unwrap())
+                .unwrap_or_default(),
         })
     }
 }
