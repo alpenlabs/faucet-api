@@ -8,4 +8,3 @@ esplora = "https://esploraapi.devnet-annapurna.stratabtc.org"
 l2_http_endpoint = "https://stratareth.devnet-annapurna.stratabtc.org"
 l1_sats_per_claim = 1_001_000_000
 l2_sats_per_claim = 101_000_000
-pow_difficulty = 19
