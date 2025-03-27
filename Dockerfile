@@ -43,7 +43,6 @@ RUN apt-get update && \
 # Copy the built binaries from the builder stage
 COPY --from=builder /app/alpen-faucet /usr/local/bin/alpen-faucet
 
-COPY ./faucet.toml faucet.toml
 COPY ./entrypoint.sh entrypoint.sh
 
 RUN chmod +x /app/entrypoint.sh
