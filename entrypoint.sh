@@ -24,7 +24,6 @@ esplora = "$ESPLORA"
 l2_http_endpoint = "$L2_HTTP_ENDPOINT"
 l1_sats_per_claim = $L1_SATS_PER_CLAIM
 l2_sats_per_claim = $L2_SATS_PER_CLAIM
-pow_difficulty = $POW_DIFFICULTY
 EOL
 
 # Debugging: Print the content of the generated faucet.toml
