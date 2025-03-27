@@ -103,7 +103,7 @@ impl L2Wallet {
         self.0.default_signer_address()
     }
 
-    pub async fn get_default_signer_balance(&self) -> Result<u64, String> {
+    pub async fn get_default_signer_balance(&self) -> Result<u128, String> {
         let signer_addr = self.0.default_signer_address();
         match self.0.get_balance(signer_addr).await {
             Ok(x) => Ok(x.to()),

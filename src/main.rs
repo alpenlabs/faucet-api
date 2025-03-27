@@ -54,6 +54,8 @@ pub struct AppState {
 pub static CRATE_NAME: LazyLock<String> =
     LazyLock::new(|| env!("CARGO_PKG_NAME").replace("-", "_"));
 
+const SATS_TO_WEI: u64 = 100_000_000_000;
+
 #[tokio::main]
 async fn main() {
     let builder = tracing_subscriber::fmt();
@@ -143,23 +145,38 @@ async fn get_pow_challenge(
     Path(chain): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ProvidedChallenge>, (StatusCode, String)> {
-    let claim_level = Chain::try_from(chain.as_str())?;
+    let chain = Chain::try_from(chain.as_str())?;
 
-    let need = match claim_level {
-        Chain::L1 => SETTINGS.l1_sats_per_claim.to_sat(),
-        Chain::L2 => SETTINGS.l2_sats_per_claim.to_sat(),
+    let (need, balance) = match chain {
+        Chain::L1 => {
+            let bal = state.l1_wallet.read().balance().confirmed.to_sat();
+            let need = SETTINGS.l1_sats_per_claim.to_sat();
+            if bal < need {
+                let error_string = format!("Insufficient funds. Has {bal}, needs {need}.");
+                return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
+            };
+            (need, bal)
+        }
+        Chain::L2 => {
+            let wei_bal = state
+                .l2_wallet
+                .get_default_signer_balance()
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+            let sats_bal = (wei_bal / (SATS_TO_WEI as u128)) as u64;
+
+            let need = SETTINGS.l2_sats_per_claim.to_sat();
+            if sats_bal < need {
+                let error_string = format!("Insufficient funds. Has {wei_bal}, needs {need}.");
+                return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
+            };
+            (need, sats_bal)
+        }
     };
-
-    let l1_balance = state.l1_wallet.read().balance().confirmed.to_sat();
-
-    if l1_balance < SETTINGS.l1_sats_per_claim.to_sat() {
-        let error_string = format!("Insufficient funds. Has {l1_balance}, needs {need}.");
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
-    }
 
     if let IpAddr::V4(ip) = ip {
         let difficulty = pow::calculate_difficulty(
-            state.l1_wallet.read().balance().confirmed.to_btc() as f32,
+            balance as f32,
             u8::MAX as f32,
             SETTINGS.pow.min_difficulty as f32,
             SETTINGS.pow.min_balance.to_btc() as f32,
