@@ -95,7 +95,7 @@ async fn main() {
         .route("/pow_challenge/{chain}", get(get_pow_challenge))
         .route("/claim_l1/{solution}/{address}", get(claim_l1))
         .route("/claim_l2/{solution}/{address}", get(claim_l2))
-        .route("/balance", get(get_balance))
+        .route("/balance/{chain}", get(get_balance))
         .route("/sats_to_claim/{chain}", get(get_sats_per_claim))
         .layer(SETTINGS.ip_src.clone().into_extension())
         .with_state(state);
@@ -254,14 +254,26 @@ async fn claim_l2(
     Ok(txid.to_string())
 }
 
-async fn get_balance(State(state): State<Arc<AppState>>) -> String {
-    state
-        .l1_wallet
-        .read()
-        .balance()
-        .confirmed
-        .to_sat()
-        .to_string()
+async fn get_balance(
+    State(state): State<Arc<AppState>>,
+    Path(chain): Path<String>,
+) -> Result<String, (StatusCode, String)> {
+    let bal = match Chain::try_from(chain.as_str())? {
+        Chain::L1 => state
+            .l1_wallet
+            .read()
+            .balance()
+            .confirmed
+            .to_sat()
+            .to_string(),
+        Chain::L2 => state
+            .l2_wallet
+            .get_default_signer_balance()
+            .await
+            .map(|x| x.to_string())
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?,
+    };
+    Ok(bal)
 }
 
 async fn get_sats_per_claim(Path(chain): Path<String>) -> Result<String, (StatusCode, String)> {
