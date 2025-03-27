@@ -9,7 +9,8 @@ SQLITE_FILE="${SQLITE_FILE:-faucet.sqlite}"
 NETWORK="${NETWORK:-signet}"
 ESPLORA="${ESPLORA:-https://explorer.bc-2.jp/api}"
 L2_HTTP_ENDPOINT="${L2_HTTP_ENDPOINT:-https://ethereum-rpc.publicnode.com}"
-SATS_PER_CLAIM="${SATS_PER_CLAIM:-1002000000}"
+L1_SATS_PER_CLAIM="${SATS_PER_CLAIM:-1002000000}"
+L2_SATS_PER_CLAIM="${SATS_PER_CLAIM:-101_000_000}"
 POW_DIFFICULTY="${POW_DIFFICULTY:-19}"
 
 
@@ -24,7 +25,8 @@ sqlite_file = "$SQLITE_FILE"
 network = "$NETWORK"
 esplora = "$ESPLORA"
 l2_http_endpoint = "$L2_HTTP_ENDPOINT"
-sats_per_claim = $SATS_PER_CLAIM
+l1_sats_per_claim = $L1_SATS_PER_CLAIM
+l2_sats_per_claim = $L2_SATS_PER_CLAIM
 pow_difficulty = $POW_DIFFICULTY
 EOL
 
