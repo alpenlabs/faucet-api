@@ -16,6 +16,7 @@ use std::{
 };
 
 use alloy::{
+    consensus::constants::ETH_TO_WEI,
     network::TransactionBuilder,
     primitives::{Address as L2Address, U256},
     providers::Provider,
@@ -54,7 +55,9 @@ pub struct AppState {
 pub static CRATE_NAME: LazyLock<String> =
     LazyLock::new(|| env!("CARGO_PKG_NAME").replace("-", "_"));
 
-const SATS_TO_WEI: u64 = 10_000_000_000;
+const BTC_TO_SATS: u64 = 100_000_000;
+const BTC_TO_WEI: u128 = ETH_TO_WEI;
+const SATS_TO_WEI: u64 = (BTC_TO_WEI / BTC_TO_SATS as u128) as u64;
 
 #[tokio::main]
 async fn main() {
