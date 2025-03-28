@@ -30,7 +30,7 @@ use axum::{
 use axum_client_ip::SecureClientIp;
 use batcher::{Batcher, L1PayoutRequest, PayoutRequest};
 use bdk_wallet::{
-    bitcoin::{address::NetworkUnchecked, Address as L1Address},
+    bitcoin::{address::NetworkUnchecked, Address as L1Address, Amount},
     KeychainKind,
 };
 use l1::{L1Wallet, Persister};
@@ -54,7 +54,7 @@ pub struct AppState {
 pub static CRATE_NAME: LazyLock<String> =
     LazyLock::new(|| env!("CARGO_PKG_NAME").replace("-", "_"));
 
-const SATS_TO_WEI: u64 = 100_000_000_000;
+const SATS_TO_WEI: u64 = 10_000_000_000;
 
 #[tokio::main]
 async fn main() {
@@ -149,13 +149,8 @@ async fn get_pow_challenge(
 
     let (need, balance) = match chain {
         Chain::L1 => {
-            let bal = state.l1_wallet.read().balance().confirmed.to_sat();
-            let need = SETTINGS.l1_sats_per_claim.to_sat();
-            if bal < need {
-                let error_string = format!("Insufficient funds. Has {bal}, needs {need}.");
-                return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
-            };
-            (need, bal)
+            let bal = state.l1_wallet.read().balance().confirmed;
+            (SETTINGS.l1_sats_per_claim, bal)
         }
         Chain::L2 => {
             let wei_bal = state
@@ -164,23 +159,23 @@ async fn get_pow_challenge(
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
             let sats_bal = (wei_bal / (SATS_TO_WEI as u128)) as u64;
-
-            let need = SETTINGS.l2_sats_per_claim.to_sat();
-            if sats_bal < need {
-                let error_string = format!("Insufficient funds. Has {wei_bal}, needs {need}.");
-                return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
-            };
-            (need, sats_bal)
+            let bal = Amount::from_sat(sats_bal);
+            (SETTINGS.l2_sats_per_claim, bal)
         }
+    };
+
+    if balance < need {
+        let error_string = format!("Insufficient {chain:?} funds. Has {balance}, needs {need}.");
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
     };
 
     if let IpAddr::V4(ip) = ip {
         let difficulty = pow::calculate_difficulty(
-            balance as f32,
+            balance.to_btc() as f32,
             u8::MAX as f32,
             SETTINGS.pow.min_difficulty as f32,
             SETTINGS.pow.min_balance.to_btc() as f32,
-            need as f32,
+            need.to_btc() as f32,
         ) as u8;
         let challenge = Challenge::get(&ip, difficulty);
         Ok(Json(ProvidedChallenge {
@@ -252,7 +247,7 @@ async fn claim_l2(
         .with_to(address)
         // 1 btc == 1 "eth" => 1 sat = 1e10 "wei"
         .with_value(U256::from(
-            SETTINGS.l2_sats_per_claim.to_sat() * 10u64.pow(10),
+            SETTINGS.l2_sats_per_claim.to_sat() * SATS_TO_WEI,
         ));
 
     let txid = match state.l2_wallet.send_transaction(tx).await {
