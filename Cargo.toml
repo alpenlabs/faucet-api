@@ -1,6 +1,6 @@
 [package]
 name = "alpen-faucet"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 
 [workspace]
@@ -8,10 +8,10 @@ resolver = "2"
 members = [".", "utils/html-solver"]
 
 [workspace.dependencies]
-tokio = "1.43.0"
+tokio = "1.44.1"
 
 [dependencies]
-alloy = { version = "0.11.0", features = [
+alloy = { version = "0.13.0", features = [
   "std",
   "rpc-client-ws",
   "network",
@@ -33,12 +33,12 @@ bip39 = { version = "2.0.0", features = ["all-languages"] }
 chrono = { version = "0.4.40", default-features = false, features = ["now"] }
 colored = "3.0.0"
 concurrent-map = "5.0.37"
-config = { version = "0.15.7", features = ["toml"], default-features = false }
+config = { version = "0.15.11", features = ["toml"], default-features = false }
 kanal = "0.1.0-pre8"
 parking_lot = "0.12.3"
 rand = "0.9.0"
-serde = { version = "1.0.217", features = ["derive"] }
-serde_json = "1.0.138"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
 sha2 = { version = "0.10.8", features = ["asm", "loongarch64_asm"] }
 shrex = { git = "https://github.com/alpenlabs/strata", version = "0.1.0", features = ["axum", "serde"] }
 terrors = "0.3.2"

@@ -2,12 +2,13 @@ use std::ops::{Deref, DerefMut};
 
 use alloy::{
     network::{Ethereum, EthereumWallet, NetworkWallet},
+    primitives::Address,
     providers::{
         fillers::{
             BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller,
             WalletFiller,
         },
-        Identity, ProviderBuilder, RootProvider,
+        Identity, Provider as AProvider, ProviderBuilder, RootProvider, WalletProvider,
     },
     signers::local::PrivateKeySigner,
 };
@@ -17,7 +18,7 @@ use bdk_wallet::bitcoin::{
     Network,
 };
 use bip39::Mnemonic;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{seed::Seed, settings::SETTINGS};
 
@@ -105,5 +106,20 @@ impl L2Wallet {
                 .map_err(|_| L2EndpointParseError)?,
         );
         Ok(Self(provider))
+    }
+
+    pub fn default_signer_address(&self) -> Address {
+        self.0.default_signer_address()
+    }
+
+    pub async fn get_default_signer_balance(&self) -> Result<u128, String> {
+        let signer_addr = self.0.default_signer_address();
+        match self.0.get_balance(signer_addr).await {
+            Ok(x) => Ok(x.to()),
+            Err(e) => {
+                error!("Could not fetch l2 balance {:?}", e);
+                Err("Could not fetch l2 balance".to_string())
+            }
+        }
     }
 }

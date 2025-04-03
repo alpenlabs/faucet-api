@@ -16,6 +16,7 @@ use std::{
 };
 
 use alloy::{
+    consensus::constants::ETH_TO_WEI,
     network::TransactionBuilder,
     primitives::{Address as L2Address, U256},
     providers::Provider,
@@ -30,7 +31,7 @@ use axum::{
 use axum_client_ip::SecureClientIp;
 use batcher::{Batcher, L1PayoutRequest, PayoutRequest};
 use bdk_wallet::{
-    bitcoin::{address::NetworkUnchecked, Address as L1Address},
+    bitcoin::{address::NetworkUnchecked, Address as L1Address, Amount},
     KeychainKind,
 };
 use l1::{L1Wallet, Persister};
@@ -53,6 +54,10 @@ pub struct AppState {
 
 pub static CRATE_NAME: LazyLock<String> =
     LazyLock::new(|| env!("CARGO_PKG_NAME").replace("-", "_"));
+
+const BTC_TO_SATS: u64 = 100_000_000;
+const BTC_TO_WEI: u128 = ETH_TO_WEI;
+const SATS_TO_WEI: u64 = (BTC_TO_WEI / BTC_TO_SATS as u128) as u64;
 
 #[tokio::main]
 async fn main() {
@@ -95,7 +100,7 @@ async fn main() {
         .route("/pow_challenge/{chain}", get(get_pow_challenge))
         .route("/claim_l1/{solution}/{address}", get(claim_l1))
         .route("/claim_l2/{solution}/{address}", get(claim_l2))
-        .route("/balance", get(get_balance))
+        .route("/balance/{chain}", get(get_balance))
         .route("/sats_to_claim/{chain}", get(get_sats_per_claim))
         .layer(SETTINGS.ip_src.clone().into_extension())
         .with_state(state);
@@ -143,27 +148,37 @@ async fn get_pow_challenge(
     Path(chain): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ProvidedChallenge>, (StatusCode, String)> {
-    let claim_level = Chain::try_from(chain.as_str())?;
+    let chain = Chain::try_from(chain.as_str())?;
 
-    let need = match claim_level {
-        Chain::L1 => SETTINGS.l1_sats_per_claim.to_sat(),
-        Chain::L2 => SETTINGS.l2_sats_per_claim.to_sat(),
+    let (need, balance) = match chain {
+        Chain::L1 => {
+            let bal = state.l1_wallet.read().balance().confirmed;
+            (SETTINGS.l1_sats_per_claim, bal)
+        }
+        Chain::L2 => {
+            let wei_bal = state
+                .l2_wallet
+                .get_default_signer_balance()
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+            let sats_bal = (wei_bal / (SATS_TO_WEI as u128)) as u64;
+            let bal = Amount::from_sat(sats_bal);
+            (SETTINGS.l2_sats_per_claim, bal)
+        }
     };
 
-    let l1_balance = state.l1_wallet.read().balance().confirmed.to_sat();
-
-    if l1_balance < SETTINGS.l1_sats_per_claim.to_sat() {
-        let error_string = format!("Insufficient funds. Has {l1_balance}, needs {need}.");
+    if balance < need {
+        let error_string = format!("Insufficient {chain:?} funds. Has {balance}, needs {need}.");
         return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
-    }
+    };
 
     if let IpAddr::V4(ip) = ip {
         let difficulty = pow::calculate_difficulty(
-            state.l1_wallet.read().balance().confirmed.to_btc() as f32,
+            balance.to_btc() as f32,
             u8::MAX as f32,
             SETTINGS.pow.min_difficulty as f32,
             SETTINGS.pow.min_balance.to_btc() as f32,
-            need as f32,
+            need.to_btc() as f32,
         ) as u8;
         let challenge = Challenge::get(&ip, difficulty);
         Ok(Json(ProvidedChallenge {
@@ -235,7 +250,7 @@ async fn claim_l2(
         .with_to(address)
         // 1 btc == 1 "eth" => 1 sat = 1e10 "wei"
         .with_value(U256::from(
-            SETTINGS.l2_sats_per_claim.to_sat() * 10u64.pow(10),
+            SETTINGS.l2_sats_per_claim.to_sat() * SATS_TO_WEI,
         ));
 
     let txid = match state.l2_wallet.send_transaction(tx).await {
@@ -254,14 +269,26 @@ async fn claim_l2(
     Ok(txid.to_string())
 }
 
-async fn get_balance(State(state): State<Arc<AppState>>) -> String {
-    state
-        .l1_wallet
-        .read()
-        .balance()
-        .confirmed
-        .to_sat()
-        .to_string()
+async fn get_balance(
+    State(state): State<Arc<AppState>>,
+    Path(chain): Path<String>,
+) -> Result<String, (StatusCode, String)> {
+    let bal = match Chain::try_from(chain.as_str())? {
+        Chain::L1 => state
+            .l1_wallet
+            .read()
+            .balance()
+            .confirmed
+            .to_sat()
+            .to_string(),
+        Chain::L2 => state
+            .l2_wallet
+            .get_default_signer_balance()
+            .await
+            .map(|x| x.to_string())
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?,
+    };
+    Ok(bal)
 }
 
 async fn get_sats_per_claim(Path(chain): Path<String>) -> Result<String, (StatusCode, String)> {
