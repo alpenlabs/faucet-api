@@ -16,6 +16,7 @@ use bdk_wallet::bitcoin::{
     secp256k1::Secp256k1,
     Network,
 };
+use bip39::Mnemonic;
 use tracing::info;
 
 use crate::{seed::Seed, settings::SETTINGS};
@@ -52,27 +53,35 @@ impl Deref for L2Wallet {
 #[derive(Debug)]
 pub struct L2EndpointParseError;
 
+/// Faucet api [`DerivationPath`](bdk_wallet::bitcoin::bip32::DerivationPath) for L2 EVM wallet
+///
+/// This corresponds to the path: `m/44'/60'/0'/0/0`.
+const BIP44_STRATA_EVM_WALLET_PATH: &[ChildNumber] = &[
+    // Purpose index for HD wallets.
+    ChildNumber::Hardened { index: 44 },
+    // Coin type index for Ethereum mainnet
+    ChildNumber::Hardened { index: 60 },
+    // Account index for user wallets.
+    ChildNumber::Hardened { index: 0 },
+    // Change index for receiving (external) addresses.
+    ChildNumber::Normal { index: 0 },
+    // Address index.
+    ChildNumber::Normal { index: 0 },
+];
+
 impl L2Wallet {
     pub fn new(seed: &Seed) -> Result<Self, L2EndpointParseError> {
-        let derivation_path = DerivationPath::master().extend([
-            // Purpose index for HD wallets.
-            ChildNumber::Hardened { index: 44 },
-            // Coin type index for Ethereum mainnet
-            ChildNumber::Hardened { index: 60 },
-            // Account index for user wallets.
-            ChildNumber::Hardened { index: 0 },
-            // Change index for receiving (external) addresses.
-            ChildNumber::Normal { index: 0 },
-            // Address index.
-            ChildNumber::Normal { index: 0 },
-        ]);
+        let derivation_path = DerivationPath::master().extend(BIP44_STRATA_EVM_WALLET_PATH);
+        let mnemonic = Mnemonic::from_entropy(seed).expect("valid entropy");
+        // We do not use a passphrase.
+        let bip39_seed = mnemonic.to_seed("");
 
         // Network choice affects how extended public and private keys are serialized.
         // See https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format.
         // Given the popularity of MetaMask, we follow their example (they always
         // hardcode mainnet) and hardcode Network::Bitcoin (mainnet) for
         // EVM-based wallet.
-        let master_key = Xpriv::new_master(Network::Bitcoin, seed).expect("valid xpriv");
+        let master_key = Xpriv::new_master(Network::Bitcoin, &bip39_seed).expect("valid xpriv");
 
         // Derive the child key for the given path
         let derived_key = master_key
