@@ -70,34 +70,9 @@ const BIP44_EVM_WALLET_PATH: &[ChildNumber] = &[
     ChildNumber::Normal { index: 0 },
 ];
 
-/// Create a new Ethereum wallet using the given seed and
-/// BIP44 derivation path `m/44'/60'/0'/0/0`.
-fn get_bip44_evm_wallet(seed: &Seed) -> EthereumWallet {
-    let derivation_path = DerivationPath::master().extend(BIP44_EVM_WALLET_PATH);
-    let mnemonic = Mnemonic::from_entropy(seed).expect("valid entropy");
-    // We do not use a passphrase.
-    let bip39_seed = mnemonic.to_seed("");
-
-    // Network choice affects how extended public and private keys are serialized.
-    // See https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format.
-    // Given the popularity of MetaMask, we follow their example (they always
-    // hardcode mainnet) and hardcode Network::Bitcoin (mainnet) for
-    // EVM-based wallet.
-    let master_key = Xpriv::new_master(Network::Bitcoin, &bip39_seed).expect("valid xpriv");
-
-    // Derive the child key for the given path
-    let derived_key = master_key
-        .derive_priv(&Secp256k1::new(), &derivation_path)
-        .unwrap();
-    let signer = PrivateKeySigner::from_slice(derived_key.private_key.secret_bytes().as_slice())
-        .expect("valid slice");
-
-    EthereumWallet::from(signer)
-}
-
 impl L2Wallet {
     pub fn new(seed: &Seed) -> Result<Self, L2EndpointParseError> {
-        let wallet = get_bip44_evm_wallet(seed);
+        let wallet = Self::get_bip44_evm_wallet(seed);
         info!(
             "L2 faucet address: {}",
             <EthereumWallet as NetworkWallet<Ethereum>>::default_signer_address(&wallet)
@@ -110,6 +85,31 @@ impl L2Wallet {
                 .map_err(|_| L2EndpointParseError)?,
         );
         Ok(Self(provider))
+    }
+
+    /// Create a new Ethereum wallet using the given seed and
+    /// BIP44 derivation path `m/44'/60'/0'/0/0`.
+    pub(crate) fn get_bip44_evm_wallet(seed: &Seed) -> EthereumWallet {
+        let derivation_path = DerivationPath::master().extend(BIP44_EVM_WALLET_PATH);
+        let mnemonic = Mnemonic::from_entropy(seed).expect("valid entropy");
+        // We do not use a passphrase.
+        let bip39_seed = mnemonic.to_seed("");
+
+        // Network choice affects how extended public and private keys are serialized.
+        // See https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format.
+        // Given the popularity of MetaMask, we follow their example (they always
+        // hardcode mainnet) and hardcode Network::Bitcoin (mainnet) for
+        // EVM-based wallet.
+        let master_key = Xpriv::new_master(Network::Bitcoin, &bip39_seed).expect("valid xpriv");
+
+        // Derive the child key for the given path
+        let derived_key = master_key
+            .derive_priv(&Secp256k1::new(), &derivation_path)
+            .unwrap();
+        let signer = PrivateKeySigner::from_slice(derived_key.private_key.secret_bytes().as_slice())
+            .expect("valid slice");
+
+        EthereumWallet::from(signer)
     }
 
     pub fn default_signer_address(&self) -> Address {
@@ -142,7 +142,7 @@ mod tests {
             0xD0, 0x36, 0x41, 0x41,
         ];
 
-        let l2wallet = get_bip44_evm_wallet(&seed);
+        let l2wallet = L2Wallet::get_bip44_evm_wallet(&seed);
         let address = l2wallet.default_signer().address().to_string();
         // BIP39 Mnemonic for `seed` should be:
         //   rival ivory defy future meat build young envelope mimic like motion lock priority
