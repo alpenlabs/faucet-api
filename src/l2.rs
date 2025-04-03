@@ -106,8 +106,9 @@ impl L2Wallet {
         let derived_key = master_key
             .derive_priv(&Secp256k1::new(), &derivation_path)
             .unwrap();
-        let signer = PrivateKeySigner::from_slice(derived_key.private_key.secret_bytes().as_slice())
-            .expect("valid slice");
+        let signer =
+            PrivateKeySigner::from_slice(derived_key.private_key.secret_bytes().as_slice())
+                .expect("valid slice");
 
         EthereumWallet::from(signer)
     }
