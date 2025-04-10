@@ -169,7 +169,7 @@ async fn get_pow_challenge(
 
     if balance < need {
         let error_string = format!("Insufficient {chain:?} funds. Has {balance}, needs {need}.");
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, error_string));
+        return Err((StatusCode::SERVICE_UNAVAILABLE, error_string));
     };
 
     if let IpAddr::V4(ip) = ip {
@@ -187,7 +187,7 @@ async fn get_pow_challenge(
         }))
     } else {
         Err((
-            StatusCode::SERVICE_UNAVAILABLE,
+            StatusCode::UNPROCESSABLE_ENTITY,
             "IPV6 is not supported at the moment".to_string(),
         ))
     }
