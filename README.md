@@ -11,7 +11,7 @@ First, call `GET /pow_challenge/<chain>`, where `<chain>` is `l1` or `l2`, which
 }
 ```
 
-This will only fail if you call it over IPv6, where it will respond with a `503 SERVICE UNAVAILABLE` code, or when the faucet has insufficient funds, where it will respond with a `500 INTERNAL SERVER ERROR`.
+This will only fail if you call it over IPv6, where it will respond with a `422 Unprocessable Entity` code, or when the faucet has insufficient funds, where it will respond with a `503 Service Unavailable`.
 
 As the client, you are challenged to then find a solution where:
 
