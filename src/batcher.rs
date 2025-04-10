@@ -41,7 +41,7 @@ pub struct BatcherNotAvailable(SendError);
 pub struct BatcherConfig {
     /// How long the period for transaction batching is.
     ///
-    /// Defaults to `30` seconds.
+    /// Defaults to `180` seconds.
     pub period: Duration,
 
     /// Maximum number of transactions to batch per batching period.
@@ -58,7 +58,7 @@ pub struct BatcherConfig {
 impl Default for BatcherConfig {
     fn default() -> Self {
         Self {
-            period: Duration::from_secs(30),
+            period: Duration::from_secs(180),
             max_per_tx: 250,
             max_in_flight: 2500,
         }
