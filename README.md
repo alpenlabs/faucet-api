@@ -2,7 +2,7 @@
 
 ## how to claim
 
-First, call `GET /get_pow_challenge` which will return something like this:
+First, call `GET /pow_challenge/<chain>`, where `<chain>` is `l1` or `l2`, which will return something like this:
 
 ```json
 {
@@ -11,7 +11,7 @@ First, call `GET /get_pow_challenge` which will return something like this:
 }
 ```
 
-This will only fail if you call it over IPv6, where it will respond with a `503 SERVICE UNAVAILABLE` code.
+This will only fail if you call it over IPv6, where it will respond with a `503 SERVICE UNAVAILABLE` code, or when the faucet has insufficient funds, where it will respond with a `500 INTERNAL SERVER ERROR`.
 
 As the client, you are challenged to then find a solution where:
 
