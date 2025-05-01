@@ -30,7 +30,7 @@ bdk_esplora = { version = "0.20.1", features = [
 ], default-features = false }
 bdk_wallet = { version = "1.1.0", features = ["rusqlite"] }
 bip39 = "2.0.0"
-chrono = { version = "0.4.40", default-features = false, features = ["now"] }
+chrono = { version = "0.4.41", default-features = false, features = ["now"] }
 colored = "3.0.0"
 concurrent-map = "5.0.37"
 config = { version = "0.15.11", features = ["toml"], default-features = false }
