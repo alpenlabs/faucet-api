@@ -8,7 +8,7 @@ resolver = "2"
 members = [".", "utils/html-solver"]
 
 [workspace.dependencies]
-tokio = "1.44.1"
+tokio = "1.44.2"
 
 [dependencies]
 alloy = { version = "0.13.0", features = [
