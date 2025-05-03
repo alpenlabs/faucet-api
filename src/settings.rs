@@ -5,7 +5,7 @@ use std::{
     sync::LazyLock,
 };
 
-use axum_client_ip::SecureClientIpSource;
+use axum_client_ip::ClientIpSource;
 use bdk_wallet::bitcoin::{Amount, Network};
 use config::Config;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ pub struct InternalSettings {
     /// Port to listen for HTTP requests on
     pub port: Option<u16>,
     /// How the server should determine the client's IP address
-    pub ip_src: SecureClientIpSource,
+    pub ip_src: ClientIpSource,
     /// Path to the seed file which stores the wallet's seed/master bytes
     pub seed_file: Option<String>,
     /// Path to the SQLite database file which stores the wallet's data
@@ -69,7 +69,7 @@ pub struct InternalSettings {
 pub struct Settings {
     pub host: IpAddr,
     pub port: u16,
-    pub ip_src: SecureClientIpSource,
+    pub ip_src: ClientIpSource,
     pub seed_file: PathBuf,
     pub sqlite_file: PathBuf,
     pub network: Network,
