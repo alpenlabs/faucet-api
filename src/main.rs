@@ -28,7 +28,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use axum_client_ip::SecureClientIp;
+use axum_client_ip::ClientIp;
 use batcher::{Batcher, L1PayoutRequest, PayoutRequest};
 use bdk_wallet::{
     bitcoin::{address::NetworkUnchecked, Address as L1Address, Amount},
@@ -144,7 +144,7 @@ impl TryFrom<&str> for Chain {
 }
 
 async fn get_pow_challenge(
-    SecureClientIp(ip): SecureClientIp,
+    ClientIp(ip): ClientIp,
     Path(chain): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ProvidedChallenge>, (StatusCode, String)> {
@@ -194,7 +194,7 @@ async fn get_pow_challenge(
 }
 
 async fn claim_l1(
-    SecureClientIp(ip): SecureClientIp,
+    ClientIp(ip): ClientIp,
     Path((solution, address)): Path<(Hex<Solution>, L1Address<NetworkUnchecked>)>,
     State(state): State<Arc<AppState>>,
 ) -> Result<(), (StatusCode, String)> {
@@ -230,7 +230,7 @@ async fn claim_l1(
 }
 
 async fn claim_l2(
-    SecureClientIp(ip): SecureClientIp,
+    ClientIp(ip): ClientIp,
     Path((solution, address)): Path<(Hex<Solution>, L2Address)>,
     State(state): State<Arc<AppState>>,
 ) -> Result<String, (StatusCode, String)> {
