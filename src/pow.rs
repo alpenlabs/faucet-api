@@ -88,17 +88,26 @@ impl Default for PowConfig {
 /// Tokens already claimed within the challenge duration.
 #[derive(Debug)]
 pub struct AlreadyClaimed;
-display_err!(AlreadyClaimed, "You have already claimed tokens. Please wait and try again.");
+display_err!(
+    AlreadyClaimed,
+    "You have already claimed tokens. Please wait and try again."
+);
 
 /// Proof of Work is invalid.
 #[derive(Debug)]
 pub struct BadProofOfWork;
-display_err!(BadProofOfWork, "Proof of Work is invalid. Please try again.");
+display_err!(
+    BadProofOfWork,
+    "Proof of Work is invalid. Please try again."
+);
 
 /// Nonce or POW challenge is no longer valid.
 #[derive(Debug)]
 pub struct NonceNotFound;
-display_err!(NonceNotFound, "Proof of Work took too long. The challenge is no longer valid.");
+display_err!(
+    NonceNotFound,
+    "Proof of Work took too long. The challenge is no longer valid."
+);
 
 impl Challenge {
     /// Retrieves a proof-of-work challenge for the given Ipv4 address.
