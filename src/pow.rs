@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 use terrors::OneOf;
 use tokio::time::sleep;
 
-use crate::{err, settings::SETTINGS};
+use crate::{display_err, err, settings::SETTINGS};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Challenge {
@@ -46,14 +46,14 @@ pub struct PowConfig {
     pub min_difficulty: u8,
     /// How long a challenge is valid for.
     ///
-    /// Defaults to `60` seconds.
+    /// Defaults to `120` seconds.
     ///
     /// In config, this should be provided as an object with fields `secs` and `nanos` with integers.
     /// For example:
     ///
     /// ```toml
     /// [pow]
-    /// challenge_duration = { secs = 60, nanos = 0 }
+    /// challenge_duration = { secs = 120, nanos = 0 }
     /// ```
     pub challenge_duration: Duration,
 }
@@ -80,17 +80,34 @@ impl Default for PowConfig {
         Self {
             min_balance: Amount::from_int_btc(500),
             min_difficulty: 17,
-            challenge_duration: Duration::from_secs(60),
+            challenge_duration: Duration::from_secs(120),
         }
     }
 }
 
-#[derive(Debug)]
-pub struct NonceNotFound;
-#[derive(Debug)]
-pub struct BadProofOfWork;
+/// Tokens already claimed within the challenge duration.
 #[derive(Debug)]
 pub struct AlreadyClaimed;
+display_err!(
+    AlreadyClaimed,
+    "You have already claimed tokens from the faucet. Please wait and try again."
+);
+
+/// Proof of Work is invalid.
+#[derive(Debug)]
+pub struct BadProofOfWork;
+display_err!(
+    BadProofOfWork,
+    "Proof of Work is invalid. Please try again."
+);
+
+/// Nonce or POW challenge is no longer valid.
+#[derive(Debug)]
+pub struct NonceNotFound;
+display_err!(
+    NonceNotFound,
+    "Proof of Work took too long. The challenge is no longer valid."
+);
 
 impl Challenge {
     /// Retrieves a proof-of-work challenge for the given Ipv4 address.
