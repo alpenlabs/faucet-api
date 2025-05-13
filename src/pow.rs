@@ -90,7 +90,11 @@ impl Default for PowConfig {
 pub struct AlreadyClaimed;
 display_err!(
     AlreadyClaimed,
+<<<<<<< HEAD
     "You have already claimed tokens. Please wait and try again."
+=======
+    "You have already claimed tokens from the faucet. Please wait and try again."
+>>>>>>> main
 );
 
 /// Proof of Work is invalid.
