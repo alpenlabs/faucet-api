@@ -152,7 +152,7 @@ impl Challenge {
         };
 
         let mut hasher = Sha256::new();
-        hasher.update(b"strata faucet 2024");
+        hasher.update(b"alpen faucet 2024");
         hasher.update(challenge.nonce);
         hasher.update(solution);
 
