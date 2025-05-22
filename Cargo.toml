@@ -40,7 +40,7 @@ rand = "0.9.0"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 sha2 = { version = "0.10.9", features = ["asm", "loongarch64_asm"] }
-shrex = { git = "https://github.com/alpenlabs/strata", version = "0.1.0", features = ["axum", "serde"] }
+shrex = { git = "https://github.com/alpenlabs/alpen", version = "0.1.0", features = ["axum", "serde"] }
 terrors = "0.3.2"
 tokio = { workspace = true, features = [
   "macros",

@@ -3937,7 +3937,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 [[package]]
 name = "shrex"
 version = "0.1.0"
-source = "git+https://github.com/alpenlabs/strata#f9014252f41f04c2f27bdd396d4d3878448193c7"
+source = "git+https://github.com/alpenlabs/alpen#f9014252f41f04c2f27bdd396d4d3878448193c7"
 dependencies = [
  "axum 0.7.9",
  "serde",
