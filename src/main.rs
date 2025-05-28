@@ -152,7 +152,7 @@ async fn get_pow_challenge(
 
     let (need, balance) = match chain {
         Chain::L1 => {
-            let bal = state.l1_wallet.read().balance().confirmed;
+            let bal = state.l1_wallet.read().balance().trusted_spendable();
             (SETTINGS.l1_sats_per_claim, bal)
         }
         Chain::L2 => {
@@ -278,7 +278,7 @@ async fn get_balance(
             .l1_wallet
             .read()
             .balance()
-            .confirmed
+            .trusted_spendable()
             .to_sat()
             .to_string(),
         Chain::L2 => state
