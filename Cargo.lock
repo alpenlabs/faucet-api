@@ -4147,9 +4147,9 @@ dependencies = [
 
 [[package]]
 name = "terrors"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a09a4471bca83dc547eb7829f7fe0b96ad3d04d21ad155e1e14084e163fe0e07"
+checksum = "987fd8c678ca950df2a18b2c6e9da6ca511d449278fab3565efe0d49c0c07a5d"
 
 [[package]]
 name = "thiserror"
