@@ -1,130 +1,139 @@
 name: Kubernetes CI/CD
 
 on:
-    push:
-        branches:
-            - main
-    workflow_dispatch:
-        inputs:
-            environment:
-                description: "Select environment"
-                required: true
-                default: "staging"
-                type: choice
-                options:
-                    - staging
-                    # currently we do not support cd to production, its only for future reference
-                    - production
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Select environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          # currently we do not support cd to production, this is only for future reference
+          - production
+
 env:
-    CI: false
-    COMMIT: ${{ github.sha }}
+  CI: false
+  COMMIT: ${{ github.sha }}
 
 permissions:
-    contents: read
-    pull-requests: read
+  contents: read
+  pull-requests: read
+
 jobs:
-    build-and-push:
-        permissions:
-            id-token: write
-        name: Build and Push Docker Image
-        runs-on: ubuntu-latest
-        environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'staging') }}
-        steps:
-            - uses: actions/checkout@v4
-              with:
-                  persist-credentials: false
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    env:
+      env_name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+    environment: ${{ env.env_name }}
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
 
-            - name: Configure AWS ECR Details
-              uses: aws-actions/configure-aws-credentials@v4
-              with:
-                  role-to-assume: ${{ secrets.AWS_ECR_ROLE }}
-                  aws-region: us-east-1
+      - name: Configure AWS ECR Details
+        uses: aws-actions/configure-aws-credentials@8c3f20df09ac63af7b3ae3d7c91f105f857d8497 # v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ECR_ROLE }}
+          aws-region: us-east-1
 
-            - name: Login to Amazon ECR
-              id: login-ecr
-              uses: aws-actions/amazon-ecr-login@v2
-              with:
-                  mask-password: "true"
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@33f92af657bba1882ab79d8621debd2f6769a0c9 # v2
+        with:
+          mask-password: "true"
 
-            - name: Build and Push Docker Image
-              id: build-and-push
-              env:
-                  ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-                  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY_PREFIX }}
-              run: |
-                  IMAGE_TAG=${COMMIT::7}
-                  DOCKERFILE_PATH="./Dockerfile"
-                  CONTEXT_DIR="."
+      - name: Build and Push Docker Image
+        id: build-and-push
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY_PREFIX }}
+        run: |
+          IMAGE_TAG=${COMMIT::7}
+          DOCKERFILE_PATH="./Dockerfile"
+          CONTEXT_DIR="."
 
-                  echo "Building Docker image for $SERVICE with tag $IMAGE_TAG and latest"
+          echo "Building Docker image with tag $IMAGE_TAG and latest"
 
-                  # Build both tags
-                  docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -f $DOCKERFILE_PATH $CONTEXT_DIR
+          # Build both tags
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -f $DOCKERFILE_PATH $CONTEXT_DIR
 
-                  # Push both tags
-                  docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-                  docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-    update-helm-values:
-        name: Update Helm Values
-        needs: [build-and-push]
-        runs-on: ubuntu-latest
-        environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'staging') }}
-        steps:
-            - name: Set up SSH for private repo access
-              uses: webfactory/ssh-agent@v0.9.1
-              with:
-                  ssh-private-key: ${{ secrets.DEPLOYMENTS_REPO_WRITE }}
-            - name: Clone deployments repo (specific branch)
-              env:
-                  BRANCH_OF_DEPLOYMENT_REPO: ${{ vars.BRANCH_OF_DEPLOYMENT_REPO }}
-              run: |
-                  git clone --depth=1 --branch "$BRANCH_OF_DEPLOYMENT_REPO" git@github.com:alpenlabs/deployments.git deployments
-                  cd deployments || exit 1
-                  git checkout "$BRANCH_OF_DEPLOYMENT_REPO"
+          # Push both tags
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-            - name: Install yq
-              run: |
-                  sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
-                  sudo chmod +x /usr/local/bin/yq
-            - name: Debug yq Version
-              run: |
-                  yq --version
-                  which yq
-            - name: Update Docker image tag in Helm values # Sanitized SHORT_TAG and safe yq usage
-              env:
-                  CLUSTER_NAME: ${{ vars.CLUSTER_NAME }}
-              run: |
-                  # Sanitize and truncate SHORT_TAG
-                  SHORT_TAG="${COMMIT//[^a-zA-Z0-9._-]/}"
-                  SHORT_TAG="${SHORT_TAG:0:7}"
+  update-helm-values:
+    name: Update Helm Values
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    env:
+      env_name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+    environment: ${{ env.env_name }}
+    steps:
+      - name: Set up SSH for private repo access
+        uses: webfactory/ssh-agent@a6f90b1f127823b31d4d4a8d96047790581349bd # 0.9.1
+        with:
+          ssh-private-key: ${{ secrets.DEPLOYMENTS_REPO_WRITE }}
 
-                  VALUES_FILE="deployments/clusters/$CLUSTER_NAME/values/strata-apps-values.yaml"
-                  if [ ! -f "$VALUES_FILE" ]; then
-                    echo "ERROR: $VALUES_FILE not found!"
-                    exit 1
-                  fi
+      - name: Clone deployments repo (specific branch)
+        env:
+          BRANCH_OF_DEPLOYMENT_REPO: ${{ vars.BRANCH_OF_DEPLOYMENT_REPO }}
+        run: |
+          : "${BRANCH_OF_DEPLOYMENT_REPO:?BRANCH_OF_DEPLOYMENT_REPO is not set}"
+          git clone --depth=1 --branch "$BRANCH_OF_DEPLOYMENT_REPO" git@github.com:alpenlabs/deployments.git deployments
+          cd deployments || exit 1
+          git checkout "$BRANCH_OF_DEPLOYMENT_REPO"
 
-                  echo "Updating Docker tag to $SHORT_TAG in $VALUES_FILE"
-                  yq eval -i ".strataFaucetSfs.strataFaucetContainer.image.tag = \"$SHORT_TAG\"" "$VALUES_FILE"
+      - name: Install yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
 
-            - name: Commit and push changes
-              env:
-                  GH_ACTIONS_USER_NAME: ${{ vars.GH_ACTIONS_USER_NAME }}
-                  CLUSTER_NAME: ${{ vars.CLUSTER_NAME }}
-                  BRANCH_OF_DEPLOYMENT_REPO: ${{ vars.BRANCH_OF_DEPLOYMENT_REPO }}
-              run: |
-                  SHORT_TAG="${COMMIT//[^a-zA-Z0-9._-]/}"
-                  SHORT_TAG="${SHORT_TAG:0:7}"
+      - name: Debug yq Version
+        run: |
+          yq --version
+          which yq
 
-                  cd deployments
-                  git config user.name "$GH_ACTIONS_USER_NAME"
-                  git config user.email "$GH_ACTIONS_USER_NAME@alpenlabs.io"
+      - name: Update Docker image tag in Helm values
+        env:
+          CLUSTER_NAME: ${{ vars.CLUSTER_NAME }}
+        run: |
+          SHORT_TAG="${COMMIT//[^a-zA-Z0-9._-]/}"
+          SHORT_TAG="${SHORT_TAG:0:7}"
 
-                  if git diff --quiet; then
-                    echo "No changes to commit."
-                  else
-                    git add clusters/$CLUSTER_NAME/values
-                    git commit -m "Update faucet image tag to $SHORT_TAG"
-                    git pull --rebase origin $BRANCH_OF_DEPLOYMENT_REPO
-                    git push origin $BRANCH_OF_DEPLOYMENT_REPO
-                  fi
+          VALUES_FILE="deployments/clusters/$CLUSTER_NAME/values/strata-apps-values.yaml"
+          if [ ! -f "$VALUES_FILE" ]; then
+            echo "ERROR: $VALUES_FILE not found!"
+            exit 1
+          fi
+
+          echo "Updating Docker tag to $SHORT_TAG in $VALUES_FILE"
+          yq eval -i ".strataFaucetSfs.strataFaucetContainer.image.tag = \"$SHORT_TAG\"" "$VALUES_FILE"
+
+      - name: Commit and push changes
+        env:
+          GH_ACTIONS_USER_NAME: ${{ vars.GH_ACTIONS_USER_NAME }}
+          CLUSTER_NAME: ${{ vars.CLUSTER_NAME }}
+          BRANCH_OF_DEPLOYMENT_REPO: ${{ vars.BRANCH_OF_DEPLOYMENT_REPO }}
+        run: |
+          SHORT_TAG="${COMMIT//[^a-zA-Z0-9._-]/}"
+          SHORT_TAG="${SHORT_TAG:0:7}"
+
+          cd deployments
+          git config user.name "$GH_ACTIONS_USER_NAME"
+          git config user.email "$GH_ACTIONS_USER_NAME@alpenlabs.io"
+
+          if git diff --quiet; then
+            echo "No changes to commit."
+          else
+            git add clusters/$CLUSTER_NAME/values
+            git commit -m "Update faucet image tag to $SHORT_TAG"
+            git pull --rebase origin $BRANCH_OF_DEPLOYMENT_REPO
+            git push origin $BRANCH_OF_DEPLOYMENT_REPO

@@ -13,62 +13,70 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
           cache-on-failure: true
       - name: Check
         run: cargo check --workspace --lib --examples --tests --benches --all-features --all-targets --locked
 
   fmt:
+    name: Check code formatting
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - name: rustfmt
-        run: cargo fmt --all --check
+      - run: cargo fmt --all --check
 
   clippy:
     needs: [check, fmt]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
           cache-on-failure: true
-      - name: Check
-        run: cargo clippy --workspace --lib --examples --tests --benches --all-features --all-targets --locked -- -D warnings
+      - run: cargo clippy --workspace --lib --examples --tests --benches --all-features --all-targets --locked -- -D warnings
 
   docs:
     needs: [check, fmt]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
           cache-on-failure: true
       - name: cargo doc
         env:
-          RUSTDOCFLAGS: "-D rustdoc::all -A rustdoc::private-doc-tests"
+          RUSTDOCFLAGS: --show-type-layout --enable-index-page -Zunstable-options -A rustdoc::private-doc-tests -D warnings
         run: cargo doc --workspace --all-features --no-deps
 
   test:
@@ -79,7 +87,9 @@ jobs:
         rust: [stable, beta]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
