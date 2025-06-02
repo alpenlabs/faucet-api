@@ -90,7 +90,7 @@ jobs:
           cache-on-failure: true
       - name: cargo doc
         env:
-          RUSTDOCFLAGS: --show-type-layout --enable-index-page -Zunstable-options -A rustdoc::private-doc-tests -D warnings
+          RUSTDOCFLAGS: "-D rustdoc::all -A rustdoc::private-doc-tests"
         run: cargo doc --workspace --all-features --no-deps
 
   test:
