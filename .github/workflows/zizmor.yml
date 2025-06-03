@@ -1,0 +1,31 @@
+name: GitHub Actions Security Analysis with zizmor 🌈
+
+on:
+  pull_request:
+    branches: ["**"]
+
+permissions: {}
+
+jobs:
+  zizmor:
+    name: zizmor latest via PyPI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+
+      - name: Run zizmor 🌈
+        run: |
+          # Install uvenv globally
+          # Ubuntu 24.04 does not allow to install packages globally
+          # and results in an `externally-management-environment error`.
+          # The `--break-system-packages` flag is used to bypass this error,
+          # but this flag should not be abused.
+          pip install uvenv --break-system-packages
+          uv tool install zizmor
+          zizmor --persona=regular --config=zizmor.yml .
