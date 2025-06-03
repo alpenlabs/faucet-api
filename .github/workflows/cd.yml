@@ -134,3 +134,4 @@ jobs:
             git commit -m "Update faucet image tag to $SHORT_TAG"
             git pull --rebase origin $BRANCH_OF_DEPLOYMENT_REPO
             git push origin $BRANCH_OF_DEPLOYMENT_REPO
+          fi
