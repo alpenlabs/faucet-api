@@ -35,4 +35,4 @@
 # Docker
 **/Dockerfile @purusang
 **/.dockerignore @purusang
-**/entrypoint.sh @purusang
+**/entrypoint.sh @Zk2u @krsnapaudel @purusang
