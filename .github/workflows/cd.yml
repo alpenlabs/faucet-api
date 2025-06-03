@@ -26,9 +26,7 @@ jobs:
   build-and-push:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
-    env:
-      env_name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
-    environment: ${{ env.env_name }}
+    environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'staging') }}
     permissions:
       id-token: write
     steps:
@@ -74,9 +72,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    env:
-      env_name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
-    environment: ${{ env.env_name }}
+    environment: ${{ inputs.environment || (github.ref == 'refs/heads/main' && 'staging') }}
     steps:
       - name: Set up SSH for private repo access
         uses: webfactory/ssh-agent@a6f90b1f127823b31d4d4a8d96047790581349bd # 0.9.1
