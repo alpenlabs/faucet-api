@@ -1,0 +1,39 @@
+# Based on git blame analysis and initial implementations.
+
+* @Zk2u # fallback
+
+# Bookkeeping
+*.toml @Zk2u
+*.md @Zk2u
+/rust-toolchain.toml @Zk2u
+/rustfmt.toml @Zk2u
+**/Cargo.toml @Zk2u
+**/Cargo.lock @Zk2u
+**/justfile @Zk2u @storopoli
+**/LICENSE* @storopoli
+**/README.md @Zk2u
+**/.gitignore @Zk2u
+
+# Modules
+/src/main.rs @Zk2u
+/src/pow.rs @Zk2u @storopoli
+/src/batcher.rs @Zk2u
+/src/l1.rs @Zk2u
+/src/l2.rs @Zk2u @krsnapaudel @bewakes
+/src/settings.rs @Zk2u @storopoli
+/src/seed.rs @Zk2u
+/src/macros.rs @Zk2u
+
+# Other components
+/utils/ @Zk2u
+/faucet.toml @Zk2u @krsnapaudel @purusang
+
+# CI/CD
+/.github/ @storopoli
+.github/workflows/cd.yml @purusang @storopoli
+/.codecov.yml @storopoli
+
+# Docker
+**/Dockerfile @purusang
+**/.dockerignore @purusang
+**/entrypoint.sh @Zk2u @krsnapaudel @purusang
