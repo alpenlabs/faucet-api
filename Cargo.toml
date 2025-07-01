@@ -34,7 +34,7 @@ chrono = { version = "0.4.41", default-features = false, features = ["now"] }
 colored = "3.0.0"
 concurrent-map = "5.0.37"
 config = { version = "0.15.11", features = ["toml"], default-features = false }
-kanal = "0.1.0-pre8"
+kanal = "0.1.1"
 parking_lot = "0.12.4"
 rand = "0.9.1"
 serde = { version = "1.0.219", features = ["derive"] }
