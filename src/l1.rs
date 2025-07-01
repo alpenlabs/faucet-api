@@ -119,7 +119,7 @@ impl L1Wallet {
     /// Create a wallet using the seed file and sqlite database.
     pub fn new(network: Network, seed: &Seed) -> io::Result<Self> {
         let rootpriv = Xpriv::new_master(Network::Signet, seed).expect("valid xpriv");
-        let base_desc = format!("tr({}/86h/0h/0h", rootpriv);
+        let base_desc = format!("tr({rootpriv}/86h/0h/0h");
         let external_desc = format!("{base_desc}/0/*)");
         let internal_desc = format!("{base_desc}/1/*)");
 
