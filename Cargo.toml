@@ -12,21 +12,21 @@ tokio = "1.46.1"
 
 [dependencies]
 alloy = { version = "0.13.0", features = [
-  "std",
-  "rpc-client-ws",
-  "network",
-  "signers",
-  "signer-local",
-  "providers",
-  "rpc-types",
+    "std",
+    "rpc-client-ws",
+    "network",
+    "signers",
+    "signer-local",
+    "providers",
+    "rpc-types",
 ] }
 arrayvec = "0.7.6"
 axum = { version = "0.8.1", features = ["http2"] }
 axum-client-ip = "1.1.3"
 axum-macros = "0.5.0"
 bdk_esplora = { version = "0.20.1", features = [
-  "async-https-rustls",
-  "tokio",
+    "async-https-rustls",
+    "tokio",
 ], default-features = false }
 bdk_wallet = { version = "1.2.0", features = ["rusqlite"] }
 bip39 = "2.2.0"
@@ -40,19 +40,22 @@ rand = "0.9.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 sha2 = { version = "0.10.9", features = ["asm", "loongarch64_asm"] }
-shrex = { git = "https://github.com/alpenlabs/alpen", version = "0.1.0", features = ["axum", "serde"] }
+shrex = { git = "https://github.com/alpenlabs/alpen", features = [
+    "axum",
+    "serde",
+] }
 terrors = "0.3.3"
 tokio = { workspace = true, features = [
-  "macros",
-  "net",
-  "parking_lot",
-  "rt-multi-thread",
-  "time",
+    "macros",
+    "net",
+    "parking_lot",
+    "rt-multi-thread",
+    "time",
 ] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.18", features = [
-  "env-filter",
-  "parking_lot",
+    "env-filter",
+    "parking_lot",
 ] }
 
 [dev-dependencies]

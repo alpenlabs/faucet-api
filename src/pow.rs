@@ -143,28 +143,45 @@ impl Challenge {
         ip: &Ipv4Addr,
         solution: Solution,
     ) -> Result<(), OneOf<(NonceNotFound, BadProofOfWork, AlreadyClaimed)>> {
-        let ns = challenge_set();
+        let challenge_set = challenge_set();
         let raw_ip = ip.to_bits();
-        let mut challenge = match ns.get(&raw_ip) {
-            Some(nonce_data) if !nonce_data.claimed => nonce_data,
-            Some(_) => return err!(AlreadyClaimed),
-            None => return err!(NonceNotFound),
+
+        let Some(old_challenge) = challenge_set.get(&raw_ip) else {
+            return err!(NonceNotFound);
         };
 
-        let mut hasher = Sha256::new();
-        hasher.update(b"alpen faucet 2024");
-        hasher.update(challenge.nonce);
-        hasher.update(solution);
+        if old_challenge.claimed {
+            return err!(AlreadyClaimed);
+        }
+
+        let mut replacement_challenge = old_challenge.clone();
+        replacement_challenge.claimed = true;
 
         // note, we mark the challenge as claimed here whether or not the
         // proof of work is valid. This is because this effectively ratelimits
         // the number of times a client can try to solve a challenge and waste
         // our server resources.
-        challenge.claimed = true;
-        let required_difficulty = challenge.difficulty;
-        ns.insert(raw_ip, challenge);
+        //
+        // This also acts as a gate against race conditions and ensures that
+        // only one client can claim a nonce at a time.
+        match challenge_set.cas(
+            ip.to_bits(),
+            Some(&old_challenge),
+            Some(replacement_challenge),
+        ) {
+            // successfully marked the unclaimed challenge as claimed, we can
+            // proceed with the proof of work check
+            Ok(_old_challenge) => (),
+            // the challenge was already claimed by another client
+            Err(_) => return err!(AlreadyClaimed),
+        }
 
-        if count_leading_zeros(&hasher.finalize()) >= required_difficulty {
+        let mut hasher = Sha256::new();
+        hasher.update(b"alpen faucet 2024");
+        hasher.update(old_challenge.nonce);
+        hasher.update(solution);
+
+        if count_leading_zeros(&hasher.finalize()) >= old_challenge.difficulty {
             Ok(())
         } else {
             err!(BadProofOfWork)
