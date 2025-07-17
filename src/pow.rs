@@ -40,9 +40,9 @@ pub struct PowConfig {
     /// Defaults to `17`.
     ///
     /// Users will have to solve a POW challenge with a chance of finding of
-    /// `1 / 2^min_difficulty` per random guess. The faucet will dynamically adjust
-    /// the actual difficulty given to the user based on the current balance,
-    /// `min_balance` and `sats_per_claim`.
+    /// `1 / 2^min_difficulty` per random guess. The faucet will dynamically
+    /// adjust the actual difficulty given to the user based on the current
+    /// balance, `min_balance` and `sats_per_claim`.
     pub min_difficulty: u8,
 }
 
@@ -389,15 +389,16 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
 ///
 /// # Guarantees
 ///
-/// This function guarantees that the difficulty will be between `min_difficulty`
-/// and `max_difficulty` given that the correctness assumptions are met.
+/// This function guarantees that the difficulty will be between
+/// `min_difficulty` and `max_difficulty` given that the correctness assumptions
+/// are met.
 ///
 /// # Correctness
 ///
 /// For this function correctly output, you must ensure:
 ///
-/// - `per_emission` > `Amount::ONE_BTC`, ideally >2 BTC due to the way the curve
-///   functions
+/// - `per_emission` > `Amount::ONE_BTC`, ideally >2 BTC due to the way the
+///   curve functions
 /// - `min_difficulty` <= `max_difficulty`
 /// - `max_difficulty`, `min_difficulty`, `min_balance`, `q` and `x` all > 0
 ///
@@ -411,7 +412,7 @@ pub fn calculate_difficulty(x: f32, big_m: f32, m: f32, b: f32, q: f32) -> f32 {
         return big_m;
     }
 
-    let fval = if q >= 1.0 { 
+    let fval = if q >= 1.0 {
         (big_m - m) * (1.0 - (x / b).log(q)) + m
     } else {
         // when q < 1.0, the log is negative, so we need to flip the log part
@@ -427,9 +428,10 @@ mod tests {
 
     use super::*;
 
-    /// Test for expected function values at sampled points for given parameters.
-    /// The points are sampled such that it covers the clamped range as well as the
-    /// range where the function's behavior is as expected.
+    /// Test for expected function values at sampled points for given
+    /// parameters. The points are sampled such that it covers the clamped
+    /// range as well as the range where the function's behavior is as
+    /// expected.
     #[test]
     fn test_function() {
         let big_m = 255.0;
@@ -481,7 +483,8 @@ mod tests {
         assert!(difficulty >= m && difficulty <= big_m);
     }
 
-    /// Tests when the balance is less than or equal to the minimum balance. The pow should be max.
+    /// Tests when the balance is less than or equal to the minimum balance. The
+    /// pow should be max.
     #[test]
     fn test_calculate_difficulty_min_balance() {
         let min_bal = 1.0;
@@ -537,7 +540,8 @@ mod tests {
         assert!(difficulty >= m && difficulty <= big_m);
     }
 
-    /// Tests when the balance is extremely large, ensuring difficulty is still clamped correctly.
+    /// Tests when the balance is extremely large, ensuring difficulty is still
+    /// clamped correctly.
     #[test]
     fn test_calculate_difficulty_extreme_balance() {
         let balance = 1_000_000.0; // Extremely high balance

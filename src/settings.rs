@@ -2,7 +2,7 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     path::PathBuf,
     str::FromStr,
-    sync::LazyLock, 
+    sync::LazyLock,
     time::Duration,
 };
 
@@ -52,9 +52,11 @@ pub struct InternalSettings {
     pub sqlite_file: Option<String>,
     /// Network to use for the wallet. Defaults to [`Network::Signet`]
     pub network: Option<Network>,
-    /// URL of the esplora API to use for the wallet. Should not have a trailing slash
+    /// URL of the esplora API to use for the wallet. Should not have a trailing
+    /// slash
     pub esplora: String,
-    /// URL of the EVM L2 HTTP endpoint to use for the wallet. Should not have a trailing slash
+    /// URL of the EVM L2 HTTP endpoint to use for the wallet. Should not have a
+    /// trailing slash
     pub l2_http_endpoint: String,
     pub l1_sats_per_claim: Amount,
     pub l2_sats_per_claim: Amount,
@@ -64,9 +66,8 @@ pub struct InternalSettings {
     pub l1_pow: Option<PowConfig>,
     /// L2-specific POW configuration
     pub l2_pow: Option<PowConfig>,
-    /// challenge duration for POW 
+    /// challenge duration for POW
     pub challenge_duration: Option<Duration>,
-
 }
 
 #[derive(Debug)]
@@ -135,16 +136,16 @@ impl TryFrom<InternalSettings> for Settings {
             l2_sats_per_claim: internal.l2_sats_per_claim,
             batcher: internal.batcher.unwrap_or_default(),
             challenge_duration: internal
-                                .challenge_duration
-                                .unwrap_or_else(|| { Duration::from_secs(120) }),
+                .challenge_duration
+                .unwrap_or_else(|| Duration::from_secs(120)),
             l1_pow: internal
-                    .l1_pow
-                    .inspect(|c| c.validate().unwrap())
-                    .unwrap_or_default(),
+                .l1_pow
+                .inspect(|c| c.validate().unwrap())
+                .unwrap_or_default(),
             l2_pow: internal
-                    .l2_pow
-                    .inspect(|c| c.validate().unwrap())
-                    .unwrap_or_default()
+                .l2_pow
+                .inspect(|c| c.validate().unwrap())
+                .unwrap_or_default(),
         })
     }
 }

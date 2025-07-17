@@ -146,10 +146,10 @@ mod tests {
         let l2wallet = L2Wallet::get_bip44_evm_wallet(&seed);
         let address = l2wallet.default_signer().address().to_string();
         // BIP39 Mnemonic for `seed` should be:
-        //   rival ivory defy future meat build young envelope mimic like motion lock priority
-        //   hover one trouble parent target virus rug snack brass agree category
-        // The expected address is obtained using the BIP39 tool with the above mnemonic
-        // and BIP44 derivation path m/44'/60'/0'/0/0.
+        //   rival ivory defy future meat build young envelope mimic like motion lock
+        // priority   hover one trouble parent target virus rug snack brass
+        // agree category The expected address is obtained using the BIP39 tool
+        // with the above mnemonic and BIP44 derivation path m/44'/60'/0'/0/0.
         let expected_address = "0xd4a8ba280143035dc74Ff171789a2D7bdd088Ab2".to_string();
         assert_eq!(address, expected_address);
     }

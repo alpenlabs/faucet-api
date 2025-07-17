@@ -177,7 +177,7 @@ async fn get_pow_challenge(
             Chain::L1 => &SETTINGS.l1_pow,
             Chain::L2 => &SETTINGS.l2_pow,
         };
-        
+
         let difficulty = pow::calculate_difficulty(
             balance.to_btc() as f32,
             u8::MAX as f32,
