@@ -44,18 +44,6 @@ pub struct PowConfig {
     /// the actual difficulty given to the user based on the current balance,
     /// `min_balance` and `sats_per_claim`.
     pub min_difficulty: u8,
-    /// How long a challenge is valid for.
-    ///
-    /// Defaults to `120` seconds.
-    ///
-    /// In config, this should be provided as an object with fields `secs` and `nanos` with integers.
-    /// For example:
-    ///
-    /// ```toml
-    /// [pow]
-    /// challenge_duration = { secs = 120, nanos = 0 }
-    /// ```
-    pub challenge_duration: Duration,
 }
 
 impl PowConfig {
@@ -80,7 +68,6 @@ impl Default for PowConfig {
         Self {
             min_balance: Amount::from_int_btc(500),
             min_difficulty: 17,
-            challenge_duration: Duration::from_secs(120),
         }
     }
 }
@@ -118,7 +105,7 @@ impl Challenge {
         let challenge = Self {
             nonce: rng().random(),
             claimed: false,
-            expires_at: Instant::now() + SETTINGS.pow.challenge_duration,
+            expires_at: Instant::now() + SETTINGS.challenge_duration,
             difficulty: difficulty_if_not_present,
         };
         match challenge_set().cas(ip.to_bits(), None, Some(challenge.clone())) {
@@ -424,7 +411,13 @@ pub fn calculate_difficulty(x: f32, big_m: f32, m: f32, b: f32, q: f32) -> f32 {
         return big_m;
     }
 
-    let fval = (big_m - m) * (1.0 - (x / b).log(q)) + m;
+    let fval = if q >= 1.0 { 
+        (big_m - m) * (1.0 - (x / b).log(q)) + m
+    } else {
+        // when q < 1.0, the log is negative, so we need to flip the log part
+        ((big_m - m) / 2.0) * ((x / b).log(q)) + m
+    };
+
     fval.clamp(m, big_m)
 }
 

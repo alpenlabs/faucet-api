@@ -173,13 +173,19 @@ async fn get_pow_challenge(
     };
 
     if let IpAddr::V4(ip) = ip {
+        let chain_config = match chain {
+            Chain::L1 => &SETTINGS.l1_pow,
+            Chain::L2 => &SETTINGS.l2_pow,
+        };
+        
         let difficulty = pow::calculate_difficulty(
             balance.to_btc() as f32,
             u8::MAX as f32,
-            SETTINGS.pow.min_difficulty as f32,
-            SETTINGS.pow.min_balance.to_btc() as f32,
+            chain_config.min_difficulty as f32,
+            chain_config.min_balance.to_btc() as f32,
             need.to_btc() as f32,
         ) as u8;
+
         let challenge = Challenge::get(&ip, difficulty);
         Ok(Json(ProvidedChallenge {
             nonce: Hex(challenge.nonce()),

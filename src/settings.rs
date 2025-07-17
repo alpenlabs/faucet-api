@@ -2,7 +2,8 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     path::PathBuf,
     str::FromStr,
-    sync::LazyLock,
+    sync::LazyLock, 
+    time::Duration,
 };
 
 use axum_client_ip::ClientIpSource;
@@ -59,8 +60,13 @@ pub struct InternalSettings {
     pub l2_sats_per_claim: Amount,
     /// Transaction batching configuration
     pub batcher: Option<BatcherConfig>,
-    /// POW configuration
-    pub pow: Option<PowConfig>,
+    /// L1-specific POW configuration
+    pub l1_pow: Option<PowConfig>,
+    /// L2-specific POW configuration
+    pub l2_pow: Option<PowConfig>,
+    /// challenge duration for POW 
+    pub challenge_duration: Option<Duration>,
+
 }
 
 #[derive(Debug)]
@@ -78,7 +84,9 @@ pub struct Settings {
     pub l1_sats_per_claim: Amount,
     pub l2_sats_per_claim: Amount,
     pub batcher: BatcherConfig,
-    pub pow: PowConfig,
+    pub l1_pow: PowConfig,
+    pub l2_pow: PowConfig,
+    pub challenge_duration: Duration,
 }
 
 // on L2, we represent 1 btc as 1 "eth" on the rollup
@@ -126,10 +134,17 @@ impl TryFrom<InternalSettings> for Settings {
             l1_sats_per_claim: internal.l1_sats_per_claim,
             l2_sats_per_claim: internal.l2_sats_per_claim,
             batcher: internal.batcher.unwrap_or_default(),
-            pow: internal
-                .pow
-                .inspect(|c| c.validate().unwrap())
-                .unwrap_or_default(),
+            challenge_duration: internal
+                                .challenge_duration
+                                .unwrap_or_else(|| { Duration::from_secs(120) }),
+            l1_pow: internal
+                    .l1_pow
+                    .inspect(|c| c.validate().unwrap())
+                    .unwrap_or_default(),
+            l2_pow: internal
+                    .l2_pow
+                    .inspect(|c| c.validate().unwrap())
+                    .unwrap_or_default()
         })
     }
 }
