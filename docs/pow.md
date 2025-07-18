@@ -15,7 +15,7 @@ Output: **$y$**, difficulty parameter. Difficulty is $2^y$. Amounts are in sats.
 Parameters:
 - **$x$**: Current balance of the faucet. Positive integer.
 - **$m$**: Minimum difficulty parameter, a good default is about 17-20. Between 0 and **$M$**.
-- **$q$**: Amount in sats emitted per successful faucet request. Positive integer.
+- **$q$**: Amount in sats emitted per successful faucet claim. Positive integer.
 - **$L$**: Difficulty linear increase coeffcient. A good default is 10-25. Positive integer.
 - **$b$**: Minimum balance. It will be computationally impossible to drop the faucet's balance below
 this value. Defaults to 0. Positive integer.
