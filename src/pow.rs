@@ -310,9 +310,9 @@ impl EvictionQueue {
 }
 
 fn delete_expired(to_expire: &[u32]) {
-    let ns = challenge_set();
+    let cs = challenge_set();
     for ip in to_expire {
-        ns.remove(ip);
+        cs.remove(ip);
     }
 }
 
