@@ -5,6 +5,7 @@ use std::{
     rc::Rc,
     sync::{Arc, LazyLock, OnceLock},
     time::{Duration, Instant},
+    u8,
 };
 
 use arrayvec::ArrayVec;
@@ -381,218 +382,202 @@ fn count_leading_zeros(data: &[u8]) -> u8 {
     leading_zeros
 }
 
-/// The faucet will dynamically adjust the difficulty based on the
-/// current balance of the faucet to make it increasingly difficult
-/// to retrieve funds from the faucet. The actual equation for this
-/// is:
-///
-/// ```math
-/// f_unclamped(x)=(M-m)(1-\log_{q}\frac{x}{b})+m
-/// f_clamped(x) = \max(m,\min(M,f_unclamped(x)))
-/// f(x) = f_clamped(x)
-/// ```
-///
-/// where:
-///
-/// - `x` is the current balance in BTC
-/// - `M` is the maximum difficulty
-/// - `m` is the minimum difficulty
-/// - `b` is the minimum balance in BTC
-/// - `q` is the amount emitted per request in BTC
-///
-/// # Guarantees
-///
-/// This function guarantees that the difficulty will be between `min_difficulty`
-/// and `max_difficulty` given that the correctness assumptions are met.
-///
-/// # Correctness
-///
-/// For this function correctly output, you must ensure:
-///
-/// - `per_emission` > `Amount::ONE_BTC`, ideally >2 BTC due to the way the curve
-///   functions
-/// - `min_difficulty` <= `max_difficulty`
-/// - `max_difficulty`, `min_difficulty`, `min_balance`, `q` and `x` all > 0
-///
-/// # Expected clamping points
-///
-/// f(x) = M at x = b
-/// f(x) = m at x = bq.
-pub fn calculate_difficulty(x: f32, big_m: f32, m: f32, b: f32, q: f32) -> f32 {
-    // optimisation for when the balance is less than or equal to the min balance
-    if x <= b {
-        return big_m;
-    }
+pub struct DifficultyConfig {
+    big_m: u8,
+    m: u8,
+    b: f32,
+    /// Optimisation for when x >= b+Lq, which should be the majority of the time
+    min_diff_start: f32,
+    /// Optimisation for the linear function. This is the gradient of the linear function.
+    precompute_big_a: f32,
+    /// Optimisation for the linear function. This is the y-intercept of the linear function.
+    precompute_big_b: f32,
+}
 
-    let fval = (big_m - m) * (1.0 - (x / b).log(q)) + m;
-    fval.clamp(m, big_m)
+impl DifficultyConfig {
+    pub fn new(
+        max_diff: u8,
+        min_diff: u8,
+        min_balance: u64,
+        sats_per_emission: u64,
+        difficulty_increase_coeff: u64,
+    ) -> Result<Self, DifficultyConfigError> {
+        if max_diff < min_diff {
+            return Err(DifficultyConfigError::MaxDiffMustBeGreaterThanMinDiff);
+        }
+
+        let big_m = max_diff as f32;
+        let m = min_diff as f32;
+        let b = min_balance as f32;
+        let q = sats_per_emission as f32;
+        let big_l = difficulty_increase_coeff as f32;
+
+        let min_diff_start = b + big_l * q;
+
+        let precompute_big_a = (m - big_m) / (big_l * q);
+        let precompute_big_b = big_m - precompute_big_a * b;
+
+        Ok(DifficultyConfig {
+            big_m: max_diff,
+            m: min_diff,
+            b,
+            min_diff_start,
+            precompute_big_a,
+            precompute_big_b,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DifficultyConfigError {
+    MaxDiffMustBeGreaterThanMinDiff,
+}
+
+/// Calculates dynamic difficulty for a given challenge. Read docs/pow.md for more information.
+pub fn calculate_difficulty(config: &DifficultyConfig, x: u64) -> u8 {
+    match x as f32 {
+        // Most expected path optimisation, return min difficulty
+        x if x >= config.min_diff_start => config.m,
+        // Least expected path optimisation, return max difficulty
+        x if x <= config.b => config.big_m,
+        // Optimised calculation for the gradient
+        x => (config.precompute_big_a * x + config.precompute_big_b).round() as u8,
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use approx::assert_relative_eq;
-
     use super::*;
 
-    /// Test for expected function values at sampled points for given parameters.
-    /// The points are sampled such that it covers the clamped range as well as the
-    /// range where the function's behavior is as expected.
     #[test]
-    fn test_function() {
-        let big_m = 255.0;
-        let q = 15.0;
-        let b = 70.0;
-        let m = 16.0;
+    fn test_new_config_valid() {
+        let config = DifficultyConfig::new(255, 20, 0, 10000, 10).unwrap();
 
-        let expected_points = [
-            // At min balance and lesser, difficulty should be max.
-            (45.0, big_m),
-            (60.03, big_m),
-            (70.0, big_m),
-            // Between the clamped points the function should behave as expected.
-            (71.0, 253.74813),
-            (103.0, 220.9128),
-            (201.0, 161.90737),
-            (327.0, 118.95743),
-            (600.0, 65.38911),
-            (800.0, 39.99963),
-            (960.0, 23.908766),
-            (1043.0, 16.590347),
-            (1049.96, 16.00336),
-            // Beyond certain point, the difficulty should always be minimum.
-            (1050.0, m),
-            (1050.0001, m),
-            (1080.0, m),
-            (1950.0, m),
-            (99950.0, m),
-        ];
+        assert_eq!(config.big_m, 255);
+        assert_eq!(config.m, 20);
+        assert_eq!(config.b, 0.0);
+        assert_eq!(config.min_diff_start, 100000.0); // b + L*q = 0 + 10*10000
 
-        for (x, exp_y) in expected_points {
-            let y = calculate_difficulty(x, big_m, m, b, q);
-            assert_relative_eq!(y, exp_y, epsilon = f32::EPSILON);
-        }
+        // Verify precomputed values
+        let expected_a = (20.0 - 255.0) / (10.0 * 10000.0);
+        let expected_b = 255.0 - expected_a * 0.0;
+        assert_eq!(config.precompute_big_a, expected_a);
+        assert_eq!(config.precompute_big_b, expected_b);
     }
 
-    // More general tests
-
-    /// Tests the calculation at a reasonable balance value.
     #[test]
-    fn test_calculate_difficulty_expected() {
-        let balance = 5.0;
-        let big_m = 256.0;
-        let m = 2.0;
-        let min_bal = 1.0;
-        let q = 2.0;
-
-        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
-        assert!(difficulty >= m && difficulty <= big_m);
+    fn test_new_config_invalid() {
+        let result = DifficultyConfig::new(10, 20, 0, 10000, 10);
+        assert!(matches!(
+            result,
+            Err(DifficultyConfigError::MaxDiffMustBeGreaterThanMinDiff)
+        ));
     }
 
-    /// Tests when the balance is less than or equal to the minimum balance. The pow should be max.
     #[test]
-    fn test_calculate_difficulty_min_balance() {
-        let min_bal = 1.0;
-        let balance = min_bal; // balance equals min_balance
-        let big_m = 256.0;
-        let m = 2.0;
-        let q = 2.0;
+    fn test_calculate_difficulty_high_balance() {
+        let config = DifficultyConfig::new(255, 20, 0, 10000, 10).unwrap();
 
-        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
-        assert_eq!(difficulty, big_m);
-
-        let balance = min_bal - 0.1; // balance less than min_balance
-        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
-        assert_eq!(difficulty, big_m);
+        // When x >= min_diff_start, should return minimum difficulty
+        assert_eq!(calculate_difficulty(&config, 100000), 20);
+        assert_eq!(calculate_difficulty(&config, 150000), 20);
+        assert_eq!(calculate_difficulty(&config, 1000000), 20);
     }
 
-    /// Tests when the balance is zero. The pow should be max.
     #[test]
-    fn test_calculate_difficulty_zero_balance() {
-        let min_bal = 1.0;
-        let balance = 0.0; // zero balance
-        let big_m = 256.0;
-        let m = 2.0;
-        let q = 2.0;
+    fn test_calculate_difficulty_low_balance() {
+        let config = DifficultyConfig::new(255, 20, 0, 10000, 10).unwrap();
 
-        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
-        assert_eq!(difficulty, big_m);
+        // When x <= b, should return maximum difficulty
+        assert_eq!(calculate_difficulty(&config, 0), 255);
     }
 
-    /// Tests when the balance is slightly greater than the minimum balance.
     #[test]
-    fn test_calculate_difficulty_slightly_above_min_balance() {
-        let min_bal = 1.0;
-        let balance = 1.1;
-        let big_m = 256.0;
-        let m = 2.0;
-        let q = 2.0;
+    fn test_calculate_difficulty_with_min_balance() {
+        let config = DifficultyConfig::new(255, 20, 5000, 10000, 10).unwrap();
 
-        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
-        assert!(difficulty < big_m && difficulty >= m);
+        // When x <= b (5000), should return maximum difficulty
+        assert_eq!(calculate_difficulty(&config, 0), 255);
+        assert_eq!(calculate_difficulty(&config, 5000), 255);
+        assert_eq!(calculate_difficulty(&config, 4999), 255);
     }
 
-    /// Tests when the balance is much larger than the minimum balance.
     #[test]
-    fn test_calculate_difficulty_large_balance() {
-        let balance = 100.0;
-        let big_m = 256.0;
-        let m = 2.0;
-        let min_bal = 1.0;
-        let q = 2.0;
+    fn test_calculate_difficulty_linear_region() {
+        let config = DifficultyConfig::new(255, 20, 0, 10000, 10).unwrap();
 
-        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
-        assert!(difficulty >= m && difficulty <= big_m);
+        // Test points in the linear region (0 < x < 100000)
+        // At x = 50000 (halfway), difficulty should be roughly halfway between 20 and 255
+        let mid_diff = calculate_difficulty(&config, 50000);
+        assert!(mid_diff > 20 && mid_diff < 255);
+
+        // Verify the linear progression
+        let diff_25k = calculate_difficulty(&config, 25000);
+        let diff_75k = calculate_difficulty(&config, 75000);
+        assert!(diff_25k > mid_diff); // Lower balance = higher difficulty
+        assert!(diff_75k < mid_diff); // Higher balance = lower difficulty
     }
 
-    /// Tests when the balance is extremely large, ensuring difficulty is still clamped correctly.
     #[test]
-    fn test_calculate_difficulty_extreme_balance() {
-        let balance = 1_000_000.0; // Extremely high balance
-        let big_m = 256.0;
-        let m = 2.0;
-        let min_bal = 1.0;
-        let q = 2.0;
+    fn test_boundary_conditions() {
+        let config = DifficultyConfig::new(255, 20, 0, 10000, 10).unwrap();
 
-        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
-        assert!(difficulty >= m && difficulty <= big_m);
+        // Test right at the boundary of min_diff_start
+        assert_eq!(calculate_difficulty(&config, 100000), 20);
+        assert_eq!(calculate_difficulty(&config, 99999), 20); // Should round to 20
+
+        // Test just above minimum balance
+        let just_above_min = calculate_difficulty(&config, 1);
+        assert!(just_above_min > 20);
     }
 
-    /// Tests when `min_difficulty` and `max_difficulty` are equal.
     #[test]
-    fn test_calculate_difficulty_same_min_max() {
-        let balance = 10.0;
-        let big_m = 5.0;
-        let m = 5.0; // min_difficulty == max_difficulty
-        let min_bal = 1.0;
-        let q = 2.0;
+    fn test_different_parameters() {
+        // Test with different L value
+        let config = DifficultyConfig::new(255, 17, 0, 5000, 25).unwrap();
+        assert_eq!(config.min_diff_start, 125000.0); // 0 + 25*5000
 
-        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
-        assert_eq!(difficulty, 5.0);
+        // High balance should give min difficulty
+        assert_eq!(calculate_difficulty(&config, 200000), 17);
+
+        // Low balance should give max difficulty
+        assert_eq!(calculate_difficulty(&config, 0), 255);
     }
 
-    /// Tests when the emission per request is large.
     #[test]
-    fn test_calculate_difficulty_large_emission() {
-        let balance = 50.0;
-        let big_m = 256.0;
-        let m = 2.0;
-        let min_bal = 1.0;
-        let q = 10.0; // Large emission
+    fn test_exact_linear_calculation() {
+        let config = DifficultyConfig::new(255, 20, 0, 10000, 10).unwrap();
 
-        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
-        assert!(difficulty >= m && difficulty <= big_m);
+        // Manually calculate expected difficulty for x = 50000
+        let x = 50000.0;
+        let expected = config.precompute_big_a * x + config.precompute_big_b;
+        let calculated = calculate_difficulty(&config, 50000);
+
+        assert_eq!(calculated, expected.round() as u8);
     }
 
-    /// Test zero minimum balance(b).
     #[test]
-    fn test_calculate_difficulty_zero_min_bal() {
-        let balance = 50.0;
-        let big_m = 256.0;
-        let m = 2.0;
-        let min_bal = 0.0;
-        let q = 10.0;
+    fn test_edge_case_equal_difficulties() {
+        // Test when min and max difficulty are equal
+        let config = DifficultyConfig::new(100, 100, 0, 10000, 10).unwrap();
 
-        let difficulty = calculate_difficulty(balance, big_m, m, min_bal, q);
-        assert_eq!(difficulty, m);
+        // Should always return 100
+        assert_eq!(calculate_difficulty(&config, 0), 100);
+        assert_eq!(calculate_difficulty(&config, 50000), 100);
+        assert_eq!(calculate_difficulty(&config, 100000), 100);
+    }
+
+    #[test]
+    fn test_large_values() {
+        let config = DifficultyConfig::new(255, 20, 1000000, 100000, 50).unwrap();
+
+        // Test with large balance values
+        assert_eq!(calculate_difficulty(&config, 10000000), 20); // Very high balance
+        assert_eq!(calculate_difficulty(&config, 500000), 255); // Below min balance
+
+        // Test in linear region
+        let mid_balance = 3500000; // Roughly in the middle of linear region
+        let diff = calculate_difficulty(&config, mid_balance);
+        assert!(diff > 20 && diff < 255);
     }
 }

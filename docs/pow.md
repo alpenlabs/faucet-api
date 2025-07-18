@@ -17,7 +17,8 @@ Parameters:
 - **$m$**: Minimum difficulty parameter, a good default is about 17-20. Between 0 and **$M$**.
 - **$q$**: Amount in sats emitted per successful faucet request. Positive integer.
 - **$L$**: Difficulty linear increase coeffcient. A good default is 10-25. Positive integer.
-- **$b$**: Minimum balance. It will be computationally impossible to drop the faucet's balance below this value. Defaults to 0. Positive integer.
+- **$b$**: Minimum balance. It will be computationally impossible to drop the faucet's balance below
+this value. Defaults to 0. Positive integer.
 
 Constants:
 - **$M$**: Maximum difficulty parameter = 255
@@ -28,12 +29,43 @@ $$y = \max(m, \min(M, \text{base}(x)))$$
 
 Derivation method:
 
-For $x \leq b$, $y = M$. I.e, when the faucet is at or below the minimum balance, the difficulty is maximum.
+For $x \leq b$, $y = M$. I.e, when the faucet is at or below the minimum balance, the difficulty is
+maximum.
 
 At $x \geq b + Lq$, $y = m$. When the faucet has at least $b + Lq$, the difficulty is minimum.
 
-$L$ controls the rate at which the difficulty increases. A higher $L$ means it will increase slower, but the difficulty will start increasing earlier.
+$L$ controls the rate at which the difficulty increases. A higher $L$ means it will increase slower,
+but the difficulty will start increasing earlier.
 
-For example, if $L = 10$, $b = 0$ and $q = 10000$, we'll start ramping up the difficulty once the faucet's balance drops below $b + Lq = 100000$ sats.
+For example, if $L = 10$, $b = 0$ and $q = 10000$, we'll start ramping up the difficulty once the
+faucet's balance drops below $b + Lq = 100000$ sats.
 
 Given these rules, you can derive the equation above from a simple linear function.
+
+## Implementation notes
+
+The actual implementation in src/pow.rs uses a optimised version to reduce CPU cycles. The gradient
+is calculated using precomputed values to avoid unnecessary multiplications and additions.
+
+To optimize for computation with $x$ as the only dynamic variable, we rearrange the equation:
+
+Starting with:
+$$\text{base}(x) = \frac{m - M}{Lq}(x-b) + M$$
+
+Expanding to:
+$$\text{base}(x) = \frac{m - M}{Lq} \cdot x - \frac{m - M}{Lq} \cdot b + M$$
+
+Now we can define two precomputable constants:
+
+$$A = \frac{m - M}{Lq}$$
+
+$$B = M - \frac{(m - M) \cdot b}{Lq}$$
+
+This gives us the simplified form:
+
+$$\text{base}(x) = A \cdot x + B$$
+
+$$y = \max(m, \min(M, A \cdot x + B))$$
+
+So the implementation we use precomputes $$A$$ and $$B$$ via a config which is passed on every
+invocation.
