@@ -6,5 +6,9 @@ sqlite_file = "faucet.sqlite"
 network = "signet"
 esplora = "https://esplora.testnet.alpenlabs.io"
 l2_http_endpoint = "https://rpc.testnet.alpenlabs.io"
-l1_sats_per_claim = 1_001_000_000
-l2_sats_per_claim = 101_000_000
+
+[l1]
+amount_per_claim = 1_001_000_000
+
+[l2]
+amount_per_claim = 101_000_000
