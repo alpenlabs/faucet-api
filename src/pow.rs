@@ -385,139 +385,164 @@ pub fn calculate_difficulty(config: &DifficultyConfig, x: Amount) -> u8 {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     #[test]
-//     fn test_new_config_valid() {
-//         let config = DifficultyConfig::new(255, 20, 0, 10000, 10).unwrap();
+    #[test]
+    fn test_new_config_valid() {
+        let config =
+            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10000), 10.).unwrap();
 
-//         assert_eq!(config.big_m, 255);
-//         assert_eq!(config.m, 20);
-//         assert_eq!(config.b, 0.0);
-//         assert_eq!(config.min_diff_start, 100000.0); // b + L*q = 0 + 10*10000
+        assert_eq!(config.big_m, 255);
+        assert_eq!(config.m, 20);
+        assert_eq!(config.b, 0.0);
+        assert_eq!(config.min_diff_start, 100000.0); // b + L*q = 0 + 10*10000
 
-//         // Verify precomputed values
-//         let expected_a = (20.0 - 255.0) / (10.0 * 10000.0);
-//         let expected_b = 255.0 - expected_a * 0.0;
-//         assert_eq!(config.precompute_big_a, expected_a);
-//         assert_eq!(config.precompute_big_b, expected_b);
-//     }
+        // Verify precomputed values
+        let expected_a = (20.0 - 255.0) / (10.0 * 10000.0);
+        let expected_b = 255.0 - expected_a * 0.0;
+        assert_eq!(config.precompute_big_a, expected_a);
+        assert_eq!(config.precompute_big_b, expected_b);
+    }
 
-//     #[test]
-//     fn test_new_config_invalid() {
-//         let result = DifficultyConfig::new(10, 20, 0, 10000, 10);
-//         assert!(matches!(
-//             result,
-//             Err(DifficultyConfigError::MaxDiffMustBeGreaterThanMinDiff)
-//         ));
-//     }
+    #[test]
+    fn test_new_config_invalid() {
+        let result = DifficultyConfig::new(10, 20, Amount::ZERO, Amount::from_sat(10000), 10.);
+        assert!(matches!(
+            result,
+            Err(DifficultyConfigError::MaxDiffMustBeGreaterThanMinDiff)
+        ));
+    }
 
-//     #[test]
-//     fn test_calculate_difficulty_high_balance() {
-//         let config = DifficultyConfig::new(255, 20, 0, 10000, 10).unwrap();
+    #[test]
+    fn test_calculate_difficulty_high_balance() {
+        let config =
+            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10000), 10.).unwrap();
 
-//         // When x >= min_diff_start, should return minimum difficulty
-//         assert_eq!(calculate_difficulty(&config, 100000), 20);
-//         assert_eq!(calculate_difficulty(&config, 150000), 20);
-//         assert_eq!(calculate_difficulty(&config, 1000000), 20);
-//     }
+        // When x >= min_diff_start, should return minimum difficulty
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(100000)), 20);
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(150000)), 20);
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(1000000)), 20);
+    }
 
-//     #[test]
-//     fn test_calculate_difficulty_low_balance() {
-//         let config = DifficultyConfig::new(255, 20, 0, 10000, 10).unwrap();
+    #[test]
+    fn test_calculate_difficulty_low_balance() {
+        let config =
+            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10000), 10.).unwrap();
 
-//         // When x <= b, should return maximum difficulty
-//         assert_eq!(calculate_difficulty(&config, 0), 255);
-//     }
+        // When x <= b, should return maximum difficulty
+        assert_eq!(calculate_difficulty(&config, Amount::ZERO), 255);
+    }
 
-//     #[test]
-//     fn test_calculate_difficulty_with_min_balance() {
-//         let config = DifficultyConfig::new(255, 20, 5000, 10000, 10).unwrap();
+    #[test]
+    fn test_calculate_difficulty_with_min_balance() {
+        let config = DifficultyConfig::new(
+            255,
+            20,
+            Amount::from_sat(5000),
+            Amount::from_sat(10000),
+            10.,
+        )
+        .unwrap();
 
-//         // When x <= b (5000), should return maximum difficulty
-//         assert_eq!(calculate_difficulty(&config, 0), 255);
-//         assert_eq!(calculate_difficulty(&config, 5000), 255);
-//         assert_eq!(calculate_difficulty(&config, 4999), 255);
-//     }
+        // When x <= b (5000), should return maximum difficulty
+        assert_eq!(calculate_difficulty(&config, Amount::ZERO), 255);
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(5000)), 255);
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(4999)), 255);
+    }
 
-//     #[test]
-//     fn test_calculate_difficulty_linear_region() {
-//         let config = DifficultyConfig::new(255, 20, 0, 10000, 10).unwrap();
+    #[test]
+    fn test_calculate_difficulty_linear_region() {
+        let config =
+            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10000), 10.).unwrap();
 
-//         // Test points in the linear region (0 < x < 100000)
-//         // At x = 50000 (halfway), difficulty should be roughly halfway between 20 and 255
-//         let mid_diff = calculate_difficulty(&config, 50000);
-//         assert!(mid_diff > 20 && mid_diff < 255);
+        // Test points in the linear region (0 < x < 100000)
+        // At x = 50000 (halfway), difficulty should be roughly halfway between 20 and 255
+        let mid_diff = calculate_difficulty(&config, Amount::from_sat(50000));
+        assert!(mid_diff > 20 && mid_diff < 255);
 
-//         // Verify the linear progression
-//         let diff_25k = calculate_difficulty(&config, 25000);
-//         let diff_75k = calculate_difficulty(&config, 75000);
-//         assert!(diff_25k > mid_diff); // Lower balance = higher difficulty
-//         assert!(diff_75k < mid_diff); // Higher balance = lower difficulty
-//     }
+        // Verify the linear progression
+        let diff_25k = calculate_difficulty(&config, Amount::from_sat(25000));
+        let diff_75k = calculate_difficulty(&config, Amount::from_sat(75000));
+        assert!(diff_25k > mid_diff); // Lower balance = higher difficulty
+        assert!(diff_75k < mid_diff); // Higher balance = lower difficulty
+    }
 
-//     #[test]
-//     fn test_boundary_conditions() {
-//         let config = DifficultyConfig::new(255, 20, 0, 10000, 10).unwrap();
+    #[test]
+    fn test_boundary_conditions() {
+        let config =
+            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10000), 10.).unwrap();
 
-//         // Test right at the boundary of min_diff_start
-//         assert_eq!(calculate_difficulty(&config, 100000), 20);
-//         assert_eq!(calculate_difficulty(&config, 99999), 20); // Should round to 20
+        // Test right at the boundary of min_diff_start
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(100000)), 20);
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(99999)), 20); // Should round to 20
 
-//         // Test just above minimum balance
-//         let just_above_min = calculate_difficulty(&config, 1);
-//         assert!(just_above_min > 20);
-//     }
+        // Test just above minimum balance
+        let just_above_min = calculate_difficulty(&config, Amount::from_sat(1));
+        assert!(just_above_min > 20);
+    }
 
-//     #[test]
-//     fn test_different_parameters() {
-//         // Test with different L value
-//         let config = DifficultyConfig::new(255, 17, 0, 5000, 25).unwrap();
-//         assert_eq!(config.min_diff_start, 125000.0); // 0 + 25*5000
+    #[test]
+    fn test_different_parameters() {
+        // Test with different L value
+        let config =
+            DifficultyConfig::new(255, 17, Amount::ZERO, Amount::from_sat(5000), 25.).unwrap();
+        assert_eq!(config.min_diff_start, 125000.0); // 0 + 25*5000
 
-//         // High balance should give min difficulty
-//         assert_eq!(calculate_difficulty(&config, 200000), 17);
+        // High balance should give min difficulty
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(200000)), 17);
 
-//         // Low balance should give max difficulty
-//         assert_eq!(calculate_difficulty(&config, 0), 255);
-//     }
+        // Low balance should give max difficulty
+        assert_eq!(calculate_difficulty(&config, Amount::ZERO), 255);
+    }
 
-//     #[test]
-//     fn test_exact_linear_calculation() {
-//         let config = DifficultyConfig::new(255, 20, 0, 10000, 10).unwrap();
+    #[test]
+    fn test_exact_linear_calculation() {
+        let config =
+            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10000), 10.).unwrap();
 
-//         // Manually calculate expected difficulty for x = 50000
-//         let x = 50000.0;
-//         let expected = config.precompute_big_a * x + config.precompute_big_b;
-//         let calculated = calculate_difficulty(&config, 50000);
+        // Manually calculate expected difficulty for x = 50000
+        let x = 50000.0;
+        let expected = config.precompute_big_a * x + config.precompute_big_b;
+        let calculated = calculate_difficulty(&config, Amount::from_sat(50000));
 
-//         assert_eq!(calculated, expected.round() as u8);
-//     }
+        assert_eq!(calculated, expected.round() as u8);
+    }
 
-//     #[test]
-//     fn test_edge_case_equal_difficulties() {
-//         // Test when min and max difficulty are equal
-//         let config = DifficultyConfig::new(100, 100, 0, 10000, 10).unwrap();
+    #[test]
+    fn test_edge_case_equal_difficulties() {
+        // Test when min and max difficulty are equal
+        let config =
+            DifficultyConfig::new(100, 100, Amount::ZERO, Amount::from_sat(10000), 10.).unwrap();
 
-//         // Should always return 100
-//         assert_eq!(calculate_difficulty(&config, 0), 100);
-//         assert_eq!(calculate_difficulty(&config, 50000), 100);
-//         assert_eq!(calculate_difficulty(&config, 100000), 100);
-//     }
+        // Should always return 100
+        assert_eq!(calculate_difficulty(&config, Amount::ZERO), 100);
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(50000)), 100);
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(100000)), 100);
+    }
 
-//     #[test]
-//     fn test_large_values() {
-//         let config = DifficultyConfig::new(255, 20, 1000000, 100000, 50).unwrap();
+    #[test]
+    fn test_large_values() {
+        let config = DifficultyConfig::new(
+            255,
+            20,
+            Amount::from_sat(1000000),
+            Amount::from_sat(100000),
+            50.,
+        )
+        .unwrap();
 
-//         // Test with large balance values
-//         assert_eq!(calculate_difficulty(&config, 10000000), 20); // Very high balance
-//         assert_eq!(calculate_difficulty(&config, 500000), 255); // Below min balance
+        // Test with large balance values
+        assert_eq!(
+            calculate_difficulty(&config, Amount::from_sat(10000000)),
+            20
+        ); // Very high balance
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(500000)), 255); // Below min balance
 
-//         // Test in linear region
-//         let mid_balance = 3500000; // Roughly in the middle of linear region
-//         let diff = calculate_difficulty(&config, mid_balance);
-//         assert!(diff > 20 && diff < 255);
-//     }
-// }
+        // Test in linear region
+        let mid_balance = 3500000; // Roughly in the middle of linear region
+        let diff = calculate_difficulty(&config, Amount::from_sat(mid_balance));
+        assert!(diff > 20 && diff < 255);
+    }
+}
