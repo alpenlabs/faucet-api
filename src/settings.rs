@@ -170,7 +170,6 @@ pub struct ReadableLayerConfig {
     /// For example:
     ///
     /// ```toml
-    /// [pow]
     /// challenge_duration = { secs = 120, nanos = 0 }
     /// ```
     pub challenge_duration: Option<Duration>,

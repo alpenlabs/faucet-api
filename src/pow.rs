@@ -170,7 +170,7 @@ pub fn challenge_set() -> Rc<ChallengeSet> {
 }
 
 /// A queue for evicting old challenges from the
-/// challenge set efficiently and automatically using a [`VecDeque`]
+/// challenge set efficiently and automatically using a [`BinaryHeap`]
 /// and a background task.
 pub struct EvictionQueue {
     q: Mutex<BinaryHeap<EvictionEntry>>,
