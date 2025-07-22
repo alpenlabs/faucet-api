@@ -196,14 +196,6 @@ async fn get_pow_challenge(
         Chain::L2 => calculate_difficulty(&state.l2_difficulty_config, balance),
     };
 
-    if balance < layer_config.amount_per_claim {
-        let error_string = format!(
-            "Insufficient {chain:?} funds. Has {balance}, need {}.",
-            layer_config.amount_per_claim
-        );
-        return Err((StatusCode::SERVICE_UNAVAILABLE, error_string));
-    };
-
     if let IpAddr::V4(ip) = ip {
         let challenge = Challenge::get(&ip, difficulty, layer_config.challenge_duration);
         Ok(Json(ProvidedChallenge {

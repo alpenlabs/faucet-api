@@ -1,20 +1,24 @@
 use std::{
-    cmp::Ordering,
-    collections::VecDeque,
+    cmp,
+    collections::BinaryHeap,
     net::Ipv4Addr,
     rc::Rc,
-    sync::{Arc, LazyLock, OnceLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, LazyLock, OnceLock,
+    },
     time::{Duration, Instant},
 };
 
-use arrayvec::ArrayVec;
 use bdk_wallet::bitcoin::Amount;
 use concurrent_map::{CasFailure, ConcurrentMap};
+use kanal::Sender;
 use parking_lot::{Mutex, MutexGuard};
 use rand::{rng, Rng};
 use sha2::{Digest, Sha256};
 use terrors::OneOf;
-use tokio::time::sleep;
+use tokio::{select, time::sleep};
+use tracing::debug;
 
 use crate::{display_err, err};
 
@@ -64,7 +68,7 @@ impl Challenge {
         };
         match challenge_set().cas(ip.to_bits(), None, Some(challenge.clone())) {
             Ok(None) => {
-                EvictionQueue::add_challenge(&challenge, *ip);
+                EVICTION_Q.add_challenge(&challenge, *ip);
                 challenge
             }
             Err(CasFailure {
@@ -169,7 +173,12 @@ pub fn challenge_set() -> Rc<ChallengeSet> {
 /// challenge set efficiently and automatically using a [`VecDeque`]
 /// and a background task.
 pub struct EvictionQueue {
-    q: Mutex<VecDeque<EvictionEntry>>,
+    q: Mutex<BinaryHeap<EvictionEntry>>,
+
+    next_wakeup_millis: AtomicU64,
+    /// notifies the background task that the wakeup time has changed
+    i_changed_the_wakeup: Sender<Instant>,
+    start: Instant,
 }
 
 static EVICTION_Q: LazyLock<Arc<EvictionQueue>> = LazyLock::new(EvictionQueue::new);
@@ -178,35 +187,70 @@ impl EvictionQueue {
     /// Creates a new [`EvictionQueue`] and spawns a background task
     /// to perform evictions every 500ms.
     fn new() -> Arc<Self> {
+        let (i_changed_the_wakeup, someone_changed_the_wakeup) = kanal::unbounded_async();
         let eq = Arc::new(EvictionQueue {
             q: Default::default(),
+            next_wakeup_millis: AtomicU64::new(u64::MAX),
+            i_changed_the_wakeup: i_changed_the_wakeup.to_sync(),
+            start: Instant::now(),
         });
         let eq2 = eq.clone();
         tokio::spawn(async move {
+            fn time_until(next_wakeup: Instant) -> Duration {
+                next_wakeup.saturating_duration_since(Instant::now())
+            }
+
+            // the next time we're gonna wake up to perform evictions
+            // default to 10000 years from now
+            let mut next_wakeup = eq2.start + Duration::from_secs(60 * 60 * 24 * 365 * 10000);
+
+            // a future to sleep until the next wakeup time, updated whenever the wakeup time changes
+            let mut honk_shoo = Box::pin(sleep(time_until(next_wakeup)));
+
             loop {
-                sleep(Duration::from_millis(500)).await;
-                eq2.remove_expired();
+                select! {
+                    Ok(new_wakeup) = someone_changed_the_wakeup.recv() => {
+                        debug!("new wakeup time received");
+                        if new_wakeup < next_wakeup {
+                            debug!("changing sleep duration from {:?} to {:?}", time_until(next_wakeup), time_until(new_wakeup));
+                            next_wakeup = new_wakeup;
+                            eq2.next_wakeup_millis.store(next_wakeup.duration_since(eq2.start).as_millis() as u64, Ordering::Relaxed);
+                            honk_shoo = Box::pin(sleep(time_until(next_wakeup)));
+                        }
+                    },
+                    // wakey wakey
+                    _ = &mut honk_shoo => {
+                        debug!("i am awake, evicting");
+                        if let Some(wakeup_time) = Self::remove_expired(eq2.q.lock()) {
+                            next_wakeup = wakeup_time;
+                            eq2.next_wakeup_millis.store(next_wakeup.duration_since(eq2.start).as_millis() as u64, Ordering::Relaxed);
+                            honk_shoo = Box::pin(sleep(time_until(next_wakeup)));
+                        } else {
+                            // default to 10000 years from now
+                            next_wakeup = eq2.start + Duration::from_secs(60 * 60 * 24 * 365 * 10000);
+                            eq2.next_wakeup_millis.store(next_wakeup.duration_since(eq2.start).as_millis() as u64, Ordering::Relaxed);
+                            honk_shoo = Box::pin(sleep(time_until(next_wakeup)));
+                        }
+                    }
+                };
             }
         });
         eq
     }
 
     /// Adds a challenge to the eviction queue to be removed TTL in the future
-    pub fn add_challenge(challenge: &Challenge, ip: Ipv4Addr) {
-        let mut q = EVICTION_Q.q.lock();
-        q.push_back(EvictionEntry {
+    pub fn add_challenge(&self, challenge: &Challenge, ip: Ipv4Addr) {
+        self.q.lock().push(EvictionEntry {
             ip,
             expires_at: challenge.expires_at,
         });
-        EVICTION_Q.remove_expired_internal(q)
-    }
-
-    /// Attempts to run the expiry routine. If not successful, it means that the
-    /// routine is already running. In this case, there's no need to block
-    /// and redo as it will be handled by the currently executing instance.
-    fn remove_expired(&self) {
-        if let Some(guard) = self.q.try_lock() {
-            self.remove_expired_internal(guard);
+        let expires_at_millies_from_start =
+            challenge.expires_at.duration_since(self.start).as_millis() as u64;
+        let next_wakeup = self.next_wakeup_millis.load(Ordering::Relaxed);
+        if expires_at_millies_from_start < next_wakeup {
+            self.i_changed_the_wakeup
+                .send(challenge.expires_at)
+                .expect("Failed to send wakeup time");
         }
     }
 
@@ -227,58 +271,27 @@ impl EvictionQueue {
     /// `delete_expired` function. This means the function does not heap
     /// allocate and it doesn't hold the lock while it's deleting
     /// pulled, expired items.
-    fn remove_expired_internal(&self, heap: HeapGuard) {
-        if heap.is_empty() {
-            return;
-        }
-
-        if heap.len() < 100 {
-            let mut expired = ArrayVec::<_, 100>::new();
-            // heap lock is auto dropped because moved into the heap
-            pull_expired(heap, &mut expired, 100);
-            delete_expired(&expired);
-            return;
-        }
-
-        let mut expired = ArrayVec::<_, 1000>::new();
-        // heap lock is auto dropped because moved into the heap
-        let more_to_expire = pull_expired(heap, &mut expired, 1000);
-        delete_expired(&expired);
-        if more_to_expire {
-            self.remove_expired()
-        }
-    }
-}
-
-fn delete_expired(to_expire: &[u32]) {
-    let cs = challenge_set();
-    for ip in to_expire {
-        cs.remove(ip);
-    }
-}
-
-type HeapGuard<'a> = MutexGuard<'a, VecDeque<EvictionEntry>>;
-
-/// Pulls expired entries from the eviction's queue and pushes their raw IPs
-/// onto a generic [`Extend`]able list
-fn pull_expired(mut from: HeapGuard, add_to: &mut impl Extend<u32>, limit: usize) -> bool {
-    let now = Instant::now();
-    let mut left = limit;
-    let mut i = 0;
-    loop {
-        match from.get(i) {
-            Some(entry) if left > 0 => {
-                if entry.expires_at <= now {
-                    add_to.extend([from.pop_front().unwrap().ip.to_bits()]);
-                    left -= 1;
+    fn remove_expired(mut heap: HeapGuard) -> Option<Instant> {
+        let mut to_expire = Vec::new();
+        let now = Instant::now();
+        let next_wakeup = loop {
+            match heap.peek() {
+                Some(entry) if entry.expires_at <= now => {
+                    to_expire.push(heap.pop().unwrap().ip.to_bits());
                 }
+                Some(entry) => break Some(entry.expires_at),
+                None => break None,
             }
-            Some(entry) => break entry.expires_at <= now,
-            None => break false,
+        };
+        let cs = challenge_set();
+        for ip in to_expire {
+            cs.remove(&ip);
         }
-        i += 1;
+        next_wakeup
     }
 }
+
+type HeapGuard<'a> = MutexGuard<'a, BinaryHeap<EvictionEntry>>;
 
 #[derive(Debug)]
 pub struct EvictionEntry {
@@ -295,14 +308,15 @@ impl PartialEq for EvictionEntry {
 impl Eq for EvictionEntry {}
 
 impl PartialOrd for EvictionEntry {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.expires_at.cmp(&other.expires_at))
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for EvictionEntry {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.expires_at.cmp(&other.expires_at)
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        // invert so we can use a min heap
+        other.expires_at.cmp(&self.expires_at)
     }
 }
 
@@ -326,11 +340,11 @@ pub struct DifficultyConfig {
     big_m: u8,
     m: u8,
     b: f32,
-    /// Optimisation for when x >= b+Lq, which should be the majority of the time
+    /// Optimization for when x >= b+Lq, which should be the majority of the time
     min_diff_start: f32,
-    /// Optimisation for the linear function. This is the gradient of the linear function.
+    /// Optimization for the linear function. This is the gradient of the linear function.
     precompute_big_a: f32,
-    /// Optimisation for the linear function. This is the y-intercept of the linear function.
+    /// Optimization for the linear function. This is the y-intercept of the linear function.
     precompute_big_b: f32,
 }
 
@@ -344,6 +358,12 @@ impl DifficultyConfig {
     ) -> Result<Self, DifficultyConfigError> {
         if max_diff < min_diff {
             return Err(DifficultyConfigError::MaxDiffMustBeGreaterThanMinDiff);
+        }
+        if per_claim == Amount::ZERO {
+            return Err(DifficultyConfigError::PerClaimMustBeGreaterThanZero);
+        }
+        if difficulty_increase_coeff <= 0.0 {
+            return Err(DifficultyConfigError::DifficultyIncreaseCoefficientMustBeGreaterThanZero);
         }
 
         let big_m = max_diff as f32;
@@ -371,14 +391,16 @@ impl DifficultyConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DifficultyConfigError {
     MaxDiffMustBeGreaterThanMinDiff,
+    PerClaimMustBeGreaterThanZero,
+    DifficultyIncreaseCoefficientMustBeGreaterThanZero,
 }
 
 /// Calculates dynamic difficulty for a given challenge. Read docs/pow.md for more information.
 pub fn calculate_difficulty(config: &DifficultyConfig, x: Amount) -> u8 {
     match x.to_sat() as f32 {
-        // Most expected path optimisation, return min difficulty
+        // Most expected path optimization, return min difficulty
         x if x >= config.min_diff_start => config.m,
-        // Least expected path optimisation, return max difficulty
+        // Least expected path optimization, return max difficulty
         x if x <= config.b => config.big_m,
         // Optimised calculation for the gradient
         x => (config.precompute_big_a * x + config.precompute_big_b).round() as u8,
@@ -397,10 +419,10 @@ mod tests {
         assert_eq!(config.big_m, 255);
         assert_eq!(config.m, 20);
         assert_eq!(config.b, 0.0);
-        assert_eq!(config.min_diff_start, 100000.0); // b + L*q = 0 + 10*10000
+        assert_eq!(config.min_diff_start, 100_000.0); // b + L*q = 0 + 10*10000
 
         // Verify precomputed values
-        let expected_a = (20.0 - 255.0) / (10.0 * 10000.0);
+        let expected_a = (20.0 - 255.0) / (10.0 * 10_000.0);
         let expected_b = 255.0 - expected_a * 0.0;
         assert_eq!(config.precompute_big_a, expected_a);
         assert_eq!(config.precompute_big_b, expected_b);
@@ -421,15 +443,18 @@ mod tests {
             DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10000), 10.).unwrap();
 
         // When x >= min_diff_start, should return minimum difficulty
-        assert_eq!(calculate_difficulty(&config, Amount::from_sat(100000)), 20);
-        assert_eq!(calculate_difficulty(&config, Amount::from_sat(150000)), 20);
-        assert_eq!(calculate_difficulty(&config, Amount::from_sat(1000000)), 20);
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(100_000)), 20);
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(150_000)), 20);
+        assert_eq!(
+            calculate_difficulty(&config, Amount::from_sat(1_000_000)),
+            20
+        );
     }
 
     #[test]
     fn test_calculate_difficulty_low_balance() {
         let config =
-            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10000), 10.).unwrap();
+            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10_000), 10.).unwrap();
 
         // When x <= b, should return maximum difficulty
         assert_eq!(calculate_difficulty(&config, Amount::ZERO), 255);
@@ -441,7 +466,7 @@ mod tests {
             255,
             20,
             Amount::from_sat(5000),
-            Amount::from_sat(10000),
+            Amount::from_sat(10_000),
             10.,
         )
         .unwrap();
@@ -455,16 +480,16 @@ mod tests {
     #[test]
     fn test_calculate_difficulty_linear_region() {
         let config =
-            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10000), 10.).unwrap();
+            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10_000), 10.).unwrap();
 
         // Test points in the linear region (0 < x < 100000)
         // At x = 50000 (halfway), difficulty should be roughly halfway between 20 and 255
-        let mid_diff = calculate_difficulty(&config, Amount::from_sat(50000));
+        let mid_diff = calculate_difficulty(&config, Amount::from_sat(50_000));
         assert!(mid_diff > 20 && mid_diff < 255);
 
         // Verify the linear progression
-        let diff_25k = calculate_difficulty(&config, Amount::from_sat(25000));
-        let diff_75k = calculate_difficulty(&config, Amount::from_sat(75000));
+        let diff_25k = calculate_difficulty(&config, Amount::from_sat(25_000));
+        let diff_75k = calculate_difficulty(&config, Amount::from_sat(75_000));
         assert!(diff_25k > mid_diff); // Lower balance = higher difficulty
         assert!(diff_75k < mid_diff); // Higher balance = lower difficulty
     }
@@ -472,11 +497,11 @@ mod tests {
     #[test]
     fn test_boundary_conditions() {
         let config =
-            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10000), 10.).unwrap();
+            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10_000), 10.).unwrap();
 
         // Test right at the boundary of min_diff_start
-        assert_eq!(calculate_difficulty(&config, Amount::from_sat(100000)), 20);
-        assert_eq!(calculate_difficulty(&config, Amount::from_sat(99999)), 20); // Should round to 20
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(100_000)), 20);
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(99_999)), 20); // Should round to 20
 
         // Test just above minimum balance
         let just_above_min = calculate_difficulty(&config, Amount::from_sat(1));
@@ -491,7 +516,7 @@ mod tests {
         assert_eq!(config.min_diff_start, 125000.0); // 0 + 25*5000
 
         // High balance should give min difficulty
-        assert_eq!(calculate_difficulty(&config, Amount::from_sat(200000)), 17);
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(200_000)), 17);
 
         // Low balance should give max difficulty
         assert_eq!(calculate_difficulty(&config, Amount::ZERO), 255);
@@ -500,12 +525,12 @@ mod tests {
     #[test]
     fn test_exact_linear_calculation() {
         let config =
-            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10000), 10.).unwrap();
+            DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10_000), 10.).unwrap();
 
         // Manually calculate expected difficulty for x = 50000
         let x = 50000.0;
         let expected = config.precompute_big_a * x + config.precompute_big_b;
-        let calculated = calculate_difficulty(&config, Amount::from_sat(50000));
+        let calculated = calculate_difficulty(&config, Amount::from_sat(50_000));
 
         assert_eq!(calculated, expected.round() as u8);
     }
@@ -514,12 +539,15 @@ mod tests {
     fn test_edge_case_equal_difficulties() {
         // Test when min and max difficulty are equal
         let config =
-            DifficultyConfig::new(100, 100, Amount::ZERO, Amount::from_sat(10000), 10.).unwrap();
+            DifficultyConfig::new(100, 100, Amount::ZERO, Amount::from_sat(10_000), 10.).unwrap();
 
         // Should always return 100
         assert_eq!(calculate_difficulty(&config, Amount::ZERO), 100);
-        assert_eq!(calculate_difficulty(&config, Amount::from_sat(50000)), 100);
-        assert_eq!(calculate_difficulty(&config, Amount::from_sat(100000)), 100);
+        assert_eq!(calculate_difficulty(&config, Amount::from_sat(50_000)), 100);
+        assert_eq!(
+            calculate_difficulty(&config, Amount::from_sat(100_000)),
+            100
+        );
     }
 
     #[test]
@@ -535,10 +563,13 @@ mod tests {
 
         // Test with large balance values
         assert_eq!(
-            calculate_difficulty(&config, Amount::from_sat(10000000)),
+            calculate_difficulty(&config, Amount::from_sat(10_000_000)),
             20
         ); // Very high balance
-        assert_eq!(calculate_difficulty(&config, Amount::from_sat(500000)), 255); // Below min balance
+        assert_eq!(
+            calculate_difficulty(&config, Amount::from_sat(500_000)),
+            255
+        ); // Below min balance
 
         // Test in linear region
         let mid_balance = 3500000; // Roughly in the middle of linear region
