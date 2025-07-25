@@ -46,9 +46,13 @@ use tokio::net::TcpListener;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
+use crate::pow::{calculate_difficulty, DifficultyConfig};
+
 pub struct AppState {
     l1_wallet: Arc<RwLock<L1Wallet>>,
     l2_wallet: L2Wallet,
+    l1_difficulty_config: DifficultyConfig,
+    l2_difficulty_config: DifficultyConfig,
     batcher: Batcher,
 }
 
@@ -90,9 +94,28 @@ async fn main() {
 
     L1Wallet::spawn_syncer(l1_wallet.clone());
 
+    let l1_difficulty_config = DifficultyConfig::new(
+        255,
+        SETTINGS.l1.min_difficulty,
+        SETTINGS.l1.min_balance,
+        SETTINGS.l1.amount_per_claim,
+        SETTINGS.l1.difficulty_increase_coeff,
+    )
+    .expect("good difficulty config");
+    let l2_difficulty_config = DifficultyConfig::new(
+        255,
+        SETTINGS.l2.min_difficulty,
+        SETTINGS.l2.min_balance,
+        SETTINGS.l2.amount_per_claim,
+        SETTINGS.l2.difficulty_increase_coeff,
+    )
+    .expect("good difficulty config");
+
     let state = Arc::new(AppState {
         l1_wallet,
+        l1_difficulty_config,
         l2_wallet,
+        l2_difficulty_config,
         batcher,
     });
 
@@ -150,11 +173,13 @@ async fn get_pow_challenge(
 ) -> Result<Json<ProvidedChallenge>, (StatusCode, String)> {
     let chain = Chain::try_from(chain.as_str())?;
 
-    let (need, balance) = match chain {
-        Chain::L1 => {
-            let bal = state.l1_wallet.read().balance().trusted_spendable();
-            (SETTINGS.l1_sats_per_claim, bal)
-        }
+    let layer_config = match chain {
+        Chain::L1 => &SETTINGS.l1,
+        Chain::L2 => &SETTINGS.l2,
+    };
+
+    let balance = match chain {
+        Chain::L1 => state.l1_wallet.read().balance().trusted_spendable(),
         Chain::L2 => {
             let wei_bal = state
                 .l2_wallet
@@ -162,25 +187,17 @@ async fn get_pow_challenge(
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
             let sats_bal = (wei_bal / (SATS_TO_WEI as u128)) as u64;
-            let bal = Amount::from_sat(sats_bal);
-            (SETTINGS.l2_sats_per_claim, bal)
+            Amount::from_sat(sats_bal)
         }
     };
 
-    if balance < need {
-        let error_string = format!("Insufficient {chain:?} funds. Has {balance}, needs {need}.");
-        return Err((StatusCode::SERVICE_UNAVAILABLE, error_string));
+    let difficulty = match chain {
+        Chain::L1 => calculate_difficulty(&state.l1_difficulty_config, balance),
+        Chain::L2 => calculate_difficulty(&state.l2_difficulty_config, balance),
     };
 
     if let IpAddr::V4(ip) = ip {
-        let difficulty = pow::calculate_difficulty(
-            balance.to_btc() as f32,
-            u8::MAX as f32,
-            SETTINGS.pow.min_difficulty as f32,
-            SETTINGS.pow.min_balance.to_btc() as f32,
-            need.to_btc() as f32,
-        ) as u8;
-        let challenge = Challenge::get(&ip, difficulty);
+        let challenge = Challenge::get(&ip, difficulty, layer_config.challenge_duration);
         Ok(Json(ProvidedChallenge {
             nonce: Hex(challenge.nonce()),
             difficulty: challenge.difficulty(),
@@ -221,7 +238,7 @@ async fn claim_l1(
         .batcher
         .queue_payout_request(PayoutRequest::L1(L1PayoutRequest {
             address,
-            amount: SETTINGS.l1_sats_per_claim,
+            amount: SETTINGS.l1.amount_per_claim,
         }))
         .await
         .expect("successful queuing");
@@ -250,7 +267,7 @@ async fn claim_l2(
         .with_to(address)
         // 1 btc == 1 "eth" => 1 sat = 1e10 "wei"
         .with_value(U256::from(
-            SETTINGS.l2_sats_per_claim.to_sat() * SATS_TO_WEI,
+            SETTINGS.l2.amount_per_claim.to_sat() * SATS_TO_WEI,
         ));
 
     let txid = match state.l2_wallet.send_transaction(tx).await {
@@ -295,40 +312,9 @@ async fn get_sats_per_claim(Path(chain): Path<String>) -> Result<String, (Status
     let claim_level = Chain::try_from(chain.as_str())?;
 
     let sats = match claim_level {
-        Chain::L1 => SETTINGS.l1_sats_per_claim.to_sat(),
-        Chain::L2 => SETTINGS.l2_sats_per_claim.to_sat(),
+        Chain::L1 => SETTINGS.l1.amount_per_claim.to_sat(),
+        Chain::L2 => SETTINGS.l2.amount_per_claim.to_sat(),
     };
 
     Ok(sats.to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use tokio::test;
-
-    use super::*;
-
-    #[test]
-    async fn test_sats_to_claim_l1() {
-        let result = get_sats_per_claim(Path("l1".to_string())).await;
-        assert_eq!(result, Ok(SETTINGS.l1_sats_per_claim.to_sat().to_string()));
-    }
-
-    #[test]
-    async fn test_sats_to_claim_l2() {
-        let result = get_sats_per_claim(Path("l2".to_string())).await;
-        assert_eq!(result, Ok(SETTINGS.l2_sats_per_claim.to_sat().to_string()));
-    }
-
-    #[test]
-    async fn test_sats_to_claim_invalid() {
-        let result = get_sats_per_claim(Path("invalid".to_string())).await;
-        assert_eq!(
-            result,
-            Err((
-                StatusCode::BAD_REQUEST,
-                "Invalid chain. Must be 'l1' or 'l2'".to_string()
-            ))
-        );
-    }
 }

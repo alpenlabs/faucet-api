@@ -3,6 +3,7 @@ use std::{
     path::PathBuf,
     str::FromStr,
     sync::LazyLock,
+    time::Duration,
 };
 
 use axum_client_ip::ClientIpSource;
@@ -10,7 +11,7 @@ use bdk_wallet::bitcoin::{Amount, Network};
 use config::Config;
 use serde::{Deserialize, Serialize};
 
-use crate::{batcher::BatcherConfig, pow::PowConfig, CRATE_NAME};
+use crate::{batcher::BatcherConfig, CRATE_NAME};
 
 pub static SETTINGS: LazyLock<Settings> = LazyLock::new(|| {
     let args = std::env::args().collect::<Vec<_>>();
@@ -31,14 +32,14 @@ pub static SETTINGS: LazyLock<Settings> = LazyLock::new(|| {
         .add_source(config::Environment::with_prefix(&CRATE_NAME.to_uppercase()))
         .build()
         .expect("a valid config")
-        .try_deserialize::<InternalSettings>()
+        .try_deserialize::<ReadableSettings>()
         .expect("a valid config")
         .try_into()
         .expect("invalid config")
 });
 
 #[derive(Serialize, Deserialize)]
-pub struct InternalSettings {
+pub struct ReadableSettings {
     /// Host to listen for HTTP requests on
     pub host: Option<IpAddr>,
     /// Port to listen for HTTP requests on
@@ -55,12 +56,10 @@ pub struct InternalSettings {
     pub esplora: String,
     /// URL of the EVM L2 HTTP endpoint to use for the wallet. Should not have a trailing slash
     pub l2_http_endpoint: String,
-    pub l1_sats_per_claim: Amount,
-    pub l2_sats_per_claim: Amount,
     /// Transaction batching configuration
     pub batcher: Option<BatcherConfig>,
-    /// POW configuration
-    pub pow: Option<PowConfig>,
+    pub l1: ReadableLayerConfig,
+    pub l2: ReadableLayerConfig,
 }
 
 #[derive(Debug)]
@@ -75,10 +74,9 @@ pub struct Settings {
     pub network: Network,
     pub esplora: String,
     pub l2_http_endpoint: String,
-    pub l1_sats_per_claim: Amount,
-    pub l2_sats_per_claim: Amount,
     pub batcher: BatcherConfig,
-    pub pow: PowConfig,
+    pub l1: LayerConfig,
+    pub l2: LayerConfig,
 }
 
 // on L2, we represent 1 btc as 1 "eth" on the rollup
@@ -99,37 +97,116 @@ pub enum SettingsError {
     InvalidDatabasePath(String),
 }
 
-impl TryFrom<InternalSettings> for Settings {
+impl TryFrom<ReadableSettings> for Settings {
     type Error = SettingsError;
 
-    fn try_from(internal: InternalSettings) -> Result<Self, Self::Error> {
-        if internal.l1_sats_per_claim > MAX_SATS_PER_CLAIM {
+    fn try_from(read_settings: ReadableSettings) -> Result<Self, Self::Error> {
+        if read_settings.l1.amount_per_claim > MAX_SATS_PER_CLAIM {
             panic!("L1 sats per claim is too high, max is {MAX_SATS_PER_CLAIM}");
         }
-        if internal.l2_sats_per_claim > MAX_SATS_PER_CLAIM {
+        if read_settings.l2.amount_per_claim > MAX_SATS_PER_CLAIM {
             panic!("L2 sats per claim is too high, max is {MAX_SATS_PER_CLAIM}");
         }
 
         Ok(Self {
-            host: internal.host.unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
-            port: internal.port.unwrap_or(3000),
-            ip_src: internal.ip_src,
-            seed_file: PathBuf::from_str(&internal.seed_file.unwrap_or("faucet.seed".to_owned()))
-                .map_err(|e| SettingsError::InvalidSeedPath(e.to_string()))?,
+            host: read_settings
+                .host
+                .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
+            port: read_settings.port.unwrap_or(3000),
+            ip_src: read_settings.ip_src,
+            seed_file: PathBuf::from_str(
+                &read_settings.seed_file.unwrap_or("faucet.seed".to_owned()),
+            )
+            .map_err(|e| SettingsError::InvalidSeedPath(e.to_string()))?,
             sqlite_file: PathBuf::from_str(
-                &internal.sqlite_file.unwrap_or("faucet.sqlite".to_owned()),
+                &read_settings
+                    .sqlite_file
+                    .unwrap_or("faucet.sqlite".to_owned()),
             )
             .map_err(|e| SettingsError::InvalidDatabasePath(e.to_string()))?,
-            network: internal.network.unwrap_or(Network::Signet),
-            esplora: internal.esplora,
-            l2_http_endpoint: internal.l2_http_endpoint,
-            l1_sats_per_claim: internal.l1_sats_per_claim,
-            l2_sats_per_claim: internal.l2_sats_per_claim,
-            batcher: internal.batcher.unwrap_or_default(),
-            pow: internal
-                .pow
-                .inspect(|c| c.validate().unwrap())
-                .unwrap_or_default(),
+            network: read_settings.network.unwrap_or(Network::Signet),
+            esplora: read_settings.esplora,
+            l2_http_endpoint: read_settings.l2_http_endpoint,
+            batcher: read_settings.batcher.unwrap_or_default(),
+            l1: read_settings.l1.into(),
+            l2: read_settings.l2.into(),
         })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReadableLayerConfig {
+    /// Minimum difficulty required for a user to claim funds.
+    ///
+    /// Defaults to `18`.
+    ///
+    /// Users will have to solve a POW challenge with a chance of finding of
+    /// `1 / 2^min_difficulty` per random guess. The faucet will dynamically adjust
+    /// the actual difficulty given to the user based on the current balance,
+    /// `min_balance` and `sats_per_claim`.
+    pub min_difficulty: Option<u8>,
+
+    /// Minimum balance to keep in the faucet
+    ///
+    /// Defaults to `0` BTC.
+    /// When configuring in the config file, this value
+    /// should be in sats as a number.
+    pub min_balance: Option<Amount>,
+
+    /// Amount of sats release per claim to the user.
+    pub amount_per_claim: Amount,
+
+    /// Adjusts how aggressive the faucet is at ramping POW difficulty when getting close
+    /// to the minimum balance. See docs/pow.md to see how this works.
+    ///
+    /// Defaults to `20`.
+    pub difficulty_increase_coeff: Option<f32>,
+
+    /// How long a challenge is valid for.
+    ///
+    /// Defaults to `120` seconds.
+    ///
+    /// In config, this should be provided as an object with fields `secs` and `nanos` with integers.
+    /// For example:
+    ///
+    /// ```toml
+    /// challenge_duration = { secs = 120, nanos = 0 }
+    /// ```
+    pub challenge_duration: Option<Duration>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LayerConfig {
+    /// Minimum difficulty required for a user to claim funds.
+    ///
+    /// Users will have to solve a POW challenge with a chance of finding of
+    /// `1 / 2^min_difficulty` per random guess. The faucet will dynamically adjust
+    /// the actual difficulty given to the user based on the current balance,
+    /// `min_balance` and `sats_per_claim`.
+    pub min_difficulty: u8,
+
+    /// Minimum balance to keep in the faucet
+    pub min_balance: Amount,
+
+    /// Amount of sats release per claim to the user.
+    pub amount_per_claim: Amount,
+
+    /// Adjusts how aggressive the faucet is at ramping POW difficulty when getting close
+    /// to the minimum balance. See docs/pow.md to see how this works.
+    pub difficulty_increase_coeff: f32,
+
+    /// How long a challenge is valid for.
+    pub challenge_duration: Duration,
+}
+
+impl From<ReadableLayerConfig> for LayerConfig {
+    fn from(value: ReadableLayerConfig) -> Self {
+        Self {
+            min_difficulty: value.min_difficulty.unwrap_or(18),
+            min_balance: value.min_balance.unwrap_or(Amount::ZERO),
+            amount_per_claim: value.amount_per_claim,
+            difficulty_increase_coeff: value.difficulty_increase_coeff.unwrap_or(20.),
+            challenge_duration: value.challenge_duration.unwrap_or(Duration::from_secs(120)),
+        }
     }
 }
