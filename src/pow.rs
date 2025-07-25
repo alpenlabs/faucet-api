@@ -202,7 +202,7 @@ impl EvictionQueue {
 
             // the next time we're gonna wake up to perform evictions
             // default to 10000 years from now
-            let mut next_wakeup = eq2.start + Duration::from_secs(60 * 60 * 24 * 365 * 10000);
+            let mut next_wakeup = eq2.start + Duration::from_secs(60 * 60 * 24 * 365 * 10_000);
 
             // a future to sleep until the next wakeup time, updated whenever the wakeup time changes
             let mut honk_shoo = Box::pin(sleep(time_until(next_wakeup)));
@@ -227,7 +227,7 @@ impl EvictionQueue {
                             honk_shoo = Box::pin(sleep(time_until(next_wakeup)));
                         } else {
                             // default to 10000 years from now
-                            next_wakeup = eq2.start + Duration::from_secs(60 * 60 * 24 * 365 * 10000);
+                            next_wakeup = eq2.start + Duration::from_secs(60 * 60 * 24 * 365 * 10_000);
                             eq2.next_wakeup_millis.store(next_wakeup.duration_since(eq2.start).as_millis() as u64, Ordering::Relaxed);
                             honk_shoo = Box::pin(sleep(time_until(next_wakeup)));
                         }
@@ -372,10 +372,41 @@ impl DifficultyConfig {
         let q = per_claim.to_sat() as f32;
         let big_l = difficulty_increase_coeff;
 
-        let min_diff_start = b + big_l * q;
+        // Check for potential overflow in big_l * q
+        let lq_product = big_l * q;
+        if !lq_product.is_finite() {
+            return Err(DifficultyConfigError::ArithmeticOverflow);
+        }
 
-        let precompute_big_a = (m - big_m) / (big_l * q);
-        let precompute_big_b = big_m - precompute_big_a * b;
+        // Check for potential overflow in b + big_l * q
+        let min_diff_start = b + lq_product;
+        if !min_diff_start.is_finite() {
+            return Err(DifficultyConfigError::ArithmeticOverflow);
+        }
+
+        // Check for division by zero or very small values that could cause issues
+        if lq_product.abs() < f32::EPSILON {
+            return Err(DifficultyConfigError::InvalidCalculation);
+        }
+
+        // Check for potential overflow in (m - big_m) / (big_l * q)
+        let numerator = m - big_m;
+        let precompute_big_a = numerator / lq_product;
+        if !precompute_big_a.is_finite() {
+            return Err(DifficultyConfigError::ArithmeticOverflow);
+        }
+
+        // Check for potential overflow in precompute_big_a * b
+        let ab_product = precompute_big_a * b;
+        if !ab_product.is_finite() {
+            return Err(DifficultyConfigError::ArithmeticOverflow);
+        }
+
+        // Check for potential overflow in big_m - precompute_big_a * b
+        let precompute_big_b = big_m - ab_product;
+        if !precompute_big_b.is_finite() {
+            return Err(DifficultyConfigError::ArithmeticOverflow);
+        }
 
         Ok(DifficultyConfig {
             big_m: max_diff,
@@ -393,7 +424,42 @@ pub enum DifficultyConfigError {
     MaxDiffMustBeGreaterThanMinDiff,
     PerClaimMustBeGreaterThanZero,
     DifficultyIncreaseCoefficientMustBeGreaterThanZero,
+    ArithmeticOverflow,
+    InvalidCalculation,
 }
+
+impl std::fmt::Display for DifficultyConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DifficultyConfigError::MaxDiffMustBeGreaterThanMinDiff => {
+                write!(
+                    f,
+                    "Maximum difficulty must be greater than minimum difficulty"
+                )
+            }
+            DifficultyConfigError::PerClaimMustBeGreaterThanZero => {
+                write!(f, "Per claim amount must be greater than zero")
+            }
+            DifficultyConfigError::DifficultyIncreaseCoefficientMustBeGreaterThanZero => {
+                write!(
+                    f,
+                    "Difficulty increase coefficient must be greater than zero"
+                )
+            }
+            DifficultyConfigError::ArithmeticOverflow => {
+                write!(
+                    f,
+                    "Arithmetic overflow occurred during difficulty configuration calculation"
+                )
+            }
+            DifficultyConfigError::InvalidCalculation => {
+                write!(f, "Invalid calculation parameters resulted in division by zero or near-zero values")
+            }
+        }
+    }
+}
+
+impl std::error::Error for DifficultyConfigError {}
 
 /// Calculates dynamic difficulty for a given challenge. Read docs/pow.md for more information.
 pub fn calculate_difficulty(config: &DifficultyConfig, x: Amount) -> u8 {
@@ -403,6 +469,8 @@ pub fn calculate_difficulty(config: &DifficultyConfig, x: Amount) -> u8 {
         // Least expected path optimization, return max difficulty
         x if x <= config.b => config.big_m,
         // Optimised calculation for the gradient
+        // Safety: guaranteed within 0..=255 due to the nature of the linear function and the bounds of x
+        // the cast performs a truncation of the decimal part, so we round prior
         x => (config.precompute_big_a * x + config.precompute_big_b).round() as u8,
     }
 }
@@ -475,6 +543,56 @@ mod tests {
         assert_eq!(calculate_difficulty(&config, Amount::ZERO), 255);
         assert_eq!(calculate_difficulty(&config, Amount::from_sat(5000)), 255);
         assert_eq!(calculate_difficulty(&config, Amount::from_sat(4999)), 255);
+    }
+
+    #[test]
+    fn test_arithmetic_overflow_error() {
+        // Test with very large values that could cause overflow
+        let result = DifficultyConfig::new(
+            255,
+            20,
+            Amount::from_sat(u64::MAX),
+            Amount::from_sat(u64::MAX),
+            f32::MAX,
+        );
+        assert!(matches!(
+            result,
+            Err(DifficultyConfigError::ArithmeticOverflow)
+        ));
+    }
+
+    #[test]
+    fn test_invalid_calculation_error() {
+        // Test with very small difficulty_increase_coeff that results in effective zero
+        let result = DifficultyConfig::new(
+            255,
+            20,
+            Amount::ZERO,
+            Amount::from_sat(1),
+            f32::EPSILON / 10.0, // Much smaller than EPSILON
+        );
+        assert!(matches!(
+            result,
+            Err(DifficultyConfigError::InvalidCalculation)
+        ));
+    }
+
+    #[test]
+    fn test_per_claim_zero_error() {
+        let result = DifficultyConfig::new(255, 20, Amount::ZERO, Amount::ZERO, 10.0);
+        assert!(matches!(
+            result,
+            Err(DifficultyConfigError::PerClaimMustBeGreaterThanZero)
+        ));
+    }
+
+    #[test]
+    fn test_negative_difficulty_coeff_error() {
+        let result = DifficultyConfig::new(255, 20, Amount::ZERO, Amount::from_sat(10000), -1.0);
+        assert!(matches!(
+            result,
+            Err(DifficultyConfigError::DifficultyIncreaseCoefficientMustBeGreaterThanZero)
+        ));
     }
 
     #[test]
