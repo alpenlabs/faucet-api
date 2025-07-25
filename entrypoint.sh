@@ -22,8 +22,10 @@ sqlite_file = "$SQLITE_FILE"
 network = "$NETWORK"
 esplora = "$ESPLORA"
 l2_http_endpoint = "$L2_HTTP_ENDPOINT"
-l1_sats_per_claim = $L1_SATS_PER_CLAIM
-l2_sats_per_claim = $L2_SATS_PER_CLAIM
+[l1]
+amount_per_claim = "$L1_AMT_PER_CLAIM"
+[l2]
+amount_per_claim = "$L2_AMT_PER_CLAIM"
 EOL
 
 # Debugging: Print the content of the generated faucet.toml
