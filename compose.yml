@@ -1,0 +1,18 @@
+services:
+  faucet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: alpen-faucet:latest
+    container_name: alpen-faucet
+    volumes:
+      - ./faucet.toml:/app/faucet.toml
+    command: ["--config", "/app/faucet.toml"]
+    ports:
+      - "3000:3000"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      NETWORK: "signet"
+      ESPLORA: "https://esplora.testnet.alpenlabs.io"
+      L2_HTTP_ENDPOINT: "https://rpc.testnet.alpenlabs.io"
