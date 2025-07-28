@@ -50,4 +50,4 @@ RUN chmod +x /app/entrypoint.sh
 # ENV PORT=${PORT:-3000}
 EXPOSE 3000
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/alpen-faucet"]
