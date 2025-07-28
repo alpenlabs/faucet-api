@@ -43,9 +43,6 @@ RUN apt-get update && \
 # Copy the built binaries from the builder stage
 COPY --from=builder /app/alpen-faucet /usr/local/bin/alpen-faucet
 
-COPY ./entrypoint.sh entrypoint.sh
-
-RUN chmod +x /app/entrypoint.sh
 
 # ENV PORT=${PORT:-3000}
 EXPOSE 3000
