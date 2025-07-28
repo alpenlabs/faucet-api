@@ -1,14 +1,107 @@
+# Exhaustive faucet.toml configuration example
+# This file demonstrates all possible configuration options
+
+# Host to listen for HTTP requests on
+# Optional: defaults to "0.0.0.0" (all interfaces)
 host = "127.0.0.1"
+
+# Port to listen for HTTP requests on
+# Optional: defaults to 3000
 port = 3000
+
+# How the server should determine the client's IP address
+# Possible values depend on axum_client_ip::ClientIpSource enum
+# Common values: "ConnectInfo", "RightmostForwarded", "RightmostXForwardedFor", "FlyClientIp"
 ip_src = "ConnectInfo"
+
+# Path to the seed file which stores the wallet's seed/master bytes
+# Optional: defaults to "faucet.seed"
 seed_file = "faucet.seed"
+
+# Path to the SQLite database file which stores the wallet's data
+# Optional: defaults to "faucet.sqlite"
 sqlite_file = "faucet.sqlite"
+
+# Bitcoin network to use
+# Optional: defaults to "signet"
+# Possible values: "bitcoin", "testnet", "signet", "regtest"
 network = "signet"
+
+# URL of the esplora API to use for the wallet (should not have a trailing slash)
+# Required field
 esplora = "https://esplora.testnet.alpenlabs.io"
+
+# URL of the EVM L2 HTTP endpoint to use for the wallet (should not have a trailing slash)
+# Required field
 l2_http_endpoint = "https://rpc.testnet.alpenlabs.io"
 
+# Transaction batching configuration
+# Optional: if not specified, uses default values
+[batcher]
+# How long the period for transaction batching is
+# Optional: defaults to 180 seconds
+# Duration format: { secs = seconds, nanos = nanoseconds }
+period = { secs = 180, nanos = 0 }
+
+# Maximum number of transactions to batch per batching period
+# Optional: defaults to 250
+max_per_tx = 250
+
+# Maximum number of requests to allow in memory at a time
+# Optional: defaults to 2500
+max_in_flight = 2500
+
+# Layer 1 (Bitcoin) configuration
 [l1]
+# Amount of sats to release per claim to the user
+# Required field - specified in satoshis
 amount_per_claim = 1_001_000_000
 
+# Minimum difficulty required for a user to claim funds
+# Optional: defaults to 18
+# Users will have to solve a POW challenge with a chance of finding of
+# 1 / 2^min_difficulty per random guess
+min_difficulty = 18
+
+# Minimum balance to keep in the faucet (in satoshis)
+# Optional: defaults to 0 BTC
+# The faucet will adjust difficulty to maintain this balance
+min_balance = 0
+
+# Adjusts how aggressive the faucet is at ramping POW difficulty when getting close
+# to the minimum balance. See docs/pow.md for details.
+# Optional: defaults to 20.0
+difficulty_increase_coeff = 20.0
+
+# How long a challenge is valid for
+# Optional: defaults to 120 seconds
+# Duration format: { secs = seconds, nanos = nanoseconds }
+challenge_duration = { secs = 120, nanos = 0 }
+
+# Layer 2 (EVM rollup) configuration
 [l2]
+# Amount of sats to release per claim to the user
+# Required field - specified in satoshis
+# Note: on L2, 1 BTC = 1 ETH, so 1 sat = 1e10 wei
 amount_per_claim = 101_000_000
+
+# Minimum difficulty required for a user to claim funds
+# Optional: defaults to 18
+# Users will have to solve a POW challenge with a chance of finding of
+# 1 / 2^min_difficulty per random guess
+min_difficulty = 18
+
+# Minimum balance to keep in the faucet (in satoshis)
+# Optional: defaults to 0 BTC
+# The faucet will adjust difficulty to maintain this balance
+min_balance = 0
+
+# Adjusts how aggressive the faucet is at ramping POW difficulty when getting close
+# to the minimum balance. See docs/pow.md for details.
+# Optional: defaults to 20.0
+difficulty_increase_coeff = 20.0
+
+# How long a challenge is valid for
+# Optional: defaults to 120 seconds
+# Duration format: { secs = seconds, nanos = nanoseconds }
+challenge_duration = { secs = 120, nanos = 0 }
