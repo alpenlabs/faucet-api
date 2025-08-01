@@ -11,7 +11,7 @@ members = [".", "utils/html-solver"]
 tokio = "1.46.1"
 
 [dependencies]
-alloy = { version = "0.13.0", features = [
+alloy = { version = "1.0.23", features = [
   "std",
   "rpc-client-ws",
   "network",
