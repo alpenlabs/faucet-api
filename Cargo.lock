@@ -1383,7 +1383,7 @@ version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -3960,7 +3960,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 [[package]]
 name = "shrex"
 version = "0.3.0-alpha.1"
-source = "git+https://github.com/alpenlabs/alpen#3b56f7eaeebd5fc10e060ce66deac1f13551a4d1"
+source = "git+https://github.com/alpenlabs/alpen#f190c594257db5023fe716eadf1f48bcbe6e20e3"
 dependencies = [
  "axum 0.7.9",
  "serde",
