@@ -20,7 +20,7 @@ use terrors::OneOf;
 use tokio::{select, time::sleep};
 use tracing::debug;
 
-use crate::{display_err, err};
+use crate::{display_err, err, Chain};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Challenge {
@@ -59,16 +59,21 @@ impl Challenge {
     ///
     /// Note that this doesn't support IPv6 yet because those IPs are a lot
     /// easier to get.
-    pub fn get(ip: &Ipv4Addr, difficulty_if_not_present: u8, challenge_duration: Duration) -> Self {
+    pub fn get(
+        chain: Chain,
+        ip: &Ipv4Addr,
+        difficulty_if_not_present: u8,
+        challenge_duration: Duration,
+    ) -> Self {
         let challenge = Self {
             nonce: rng().random(),
             claimed: false,
             expires_at: Instant::now() + challenge_duration,
             difficulty: difficulty_if_not_present,
         };
-        match challenge_set().cas(ip.to_bits(), None, Some(challenge.clone())) {
+        match challenge_set().cas((ip.to_bits(), chain), None, Some(challenge.clone())) {
             Ok(None) => {
-                EVICTION_Q.add_challenge(&challenge, *ip);
+                EVICTION_Q.add_challenge(&challenge, *ip, chain);
                 challenge
             }
             Err(CasFailure {
@@ -85,13 +90,14 @@ impl Challenge {
 
     /// Validates the proof of work solution by the client.
     pub fn check_solution(
+        chain: Chain,
         ip: &Ipv4Addr,
         solution: Solution,
     ) -> Result<(), OneOf<(NonceNotFound, BadProofOfWork, AlreadyClaimed)>> {
         let challenge_set = challenge_set();
         let raw_ip = ip.to_bits();
 
-        let Some(old_challenge) = challenge_set.get(&raw_ip) else {
+        let Some(old_challenge) = challenge_set.get(&(raw_ip, chain)) else {
             return err!(NonceNotFound);
         };
 
@@ -110,7 +116,7 @@ impl Challenge {
         // This also acts as a gate against race conditions and ensures that
         // only one client can claim a nonce at a time.
         match challenge_set.cas(
-            ip.to_bits(),
+            (ip.to_bits(), chain),
             Some(&old_challenge),
             Some(replacement_challenge),
         ) {
@@ -148,7 +154,7 @@ pub type Nonce = [u8; 16];
 /// has a nonce present. IPs stored as u32 form for
 /// compatibility with concurrent map. IPs are big endian
 /// but these are notably using platform endianness.
-pub type ChallengeSet = ConcurrentMap<u32, Challenge>;
+pub type ChallengeSet = ConcurrentMap<(u32, Chain), Challenge>;
 
 static CELL: OnceLock<Mutex<ChallengeSet>> = OnceLock::new();
 
@@ -239,9 +245,10 @@ impl EvictionQueue {
     }
 
     /// Adds a challenge to the eviction queue to be removed TTL in the future
-    pub fn add_challenge(&self, challenge: &Challenge, ip: Ipv4Addr) {
+    pub fn add_challenge(&self, challenge: &Challenge, ip: Ipv4Addr, chain: Chain) {
         self.q.lock().push(EvictionEntry {
             ip,
+            chain,
             expires_at: challenge.expires_at,
         });
         let expires_at_millies_from_start =
@@ -277,15 +284,15 @@ impl EvictionQueue {
         let next_wakeup = loop {
             match heap.peek() {
                 Some(entry) if entry.expires_at <= now => {
-                    to_expire.push(heap.pop().unwrap().ip.to_bits());
+                    to_expire.push(heap.pop().unwrap());
                 }
                 Some(entry) => break Some(entry.expires_at),
                 None => break None,
             }
         };
         let cs = challenge_set();
-        for ip in to_expire {
-            cs.remove(&ip);
+        for EvictionEntry { ip, chain, .. } in to_expire {
+            cs.remove(&(ip.to_bits(), chain));
         }
         next_wakeup
     }
@@ -296,6 +303,7 @@ type HeapGuard<'a> = MutexGuard<'a, BinaryHeap<EvictionEntry>>;
 #[derive(Debug)]
 pub struct EvictionEntry {
     ip: Ipv4Addr,
+    chain: Chain,
     expires_at: Instant,
 }
 
