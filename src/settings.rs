@@ -146,6 +146,11 @@ pub struct ReadableLayerConfig {
     /// `min_balance` and `sats_per_claim`.
     pub min_difficulty: Option<u8>,
 
+    /// Maximum difficulty cap that the faucet will adjust to.
+    ///
+    /// Defaults to 64.
+    pub max_difficulty: Option<u8>,
+
     /// Minimum balance to keep in the faucet
     ///
     /// Defaults to `0` BTC.
@@ -185,6 +190,11 @@ pub struct LayerConfig {
     /// `min_balance` and `sats_per_claim`.
     pub min_difficulty: u8,
 
+    /// Maximum difficulty cap that the faucet will adjust to.
+    ///
+    /// Defaults to 64.
+    pub max_difficulty: u8,
+
     /// Minimum balance to keep in the faucet
     pub min_balance: Amount,
 
@@ -203,6 +213,7 @@ impl From<ReadableLayerConfig> for LayerConfig {
     fn from(value: ReadableLayerConfig) -> Self {
         Self {
             min_difficulty: value.min_difficulty.unwrap_or(18),
+            max_difficulty: value.max_difficulty.unwrap_or(64),
             min_balance: value.min_balance.unwrap_or(Amount::ZERO),
             amount_per_claim: value.amount_per_claim,
             difficulty_increase_coeff: value.difficulty_increase_coeff.unwrap_or(20.),

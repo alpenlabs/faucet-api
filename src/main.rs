@@ -34,6 +34,7 @@ use bdk_wallet::{
     bitcoin::{address::NetworkUnchecked, Address as L1Address, Amount},
     KeychainKind,
 };
+use concurrent_map::Minimum;
 use l1::{L1Wallet, Persister};
 use l2::L2Wallet;
 use parking_lot::RwLock;
@@ -95,7 +96,7 @@ async fn main() {
     L1Wallet::spawn_syncer(l1_wallet.clone());
 
     let l1_difficulty_config = DifficultyConfig::new(
-        255,
+        SETTINGS.l1.max_difficulty,
         SETTINGS.l1.min_difficulty,
         SETTINGS.l1.min_balance,
         SETTINGS.l1.amount_per_claim,
@@ -103,7 +104,7 @@ async fn main() {
     )
     .expect("good difficulty config");
     let l2_difficulty_config = DifficultyConfig::new(
-        255,
+        SETTINGS.l2.max_difficulty,
         SETTINGS.l2.min_difficulty,
         SETTINGS.l2.min_balance,
         SETTINGS.l2.amount_per_claim,
@@ -145,10 +146,14 @@ pub struct ProvidedChallenge {
 }
 
 /// Which chain the faucet is reasoning about.
-#[derive(Debug)]
-enum Chain {
+#[derive(Debug, PartialEq, PartialOrd, Ord, Clone, Copy, Eq, Hash)]
+pub enum Chain {
     L1,
     L2,
+}
+
+impl Minimum for Chain {
+    const MIN: Self = Chain::L1;
 }
 
 impl TryFrom<&str> for Chain {
@@ -197,7 +202,7 @@ async fn get_pow_challenge(
     };
 
     if let IpAddr::V4(ip) = ip {
-        let challenge = Challenge::get(&ip, difficulty, layer_config.challenge_duration);
+        let challenge = Challenge::get(chain, &ip, difficulty, layer_config.challenge_duration);
         Ok(Json(ProvidedChallenge {
             nonce: Hex(challenge.nonce()),
             difficulty: challenge.difficulty(),
@@ -223,7 +228,7 @@ async fn claim_l1(
     };
 
     // num hashes on average to solve challenge: 2^15
-    if let Err(e) = Challenge::check_solution(&ip, solution.0) {
+    if let Err(e) = Challenge::check_solution(Chain::L1, &ip, solution.0) {
         return Err((StatusCode::BAD_REQUEST, e.to_string()));
     }
 
@@ -259,7 +264,7 @@ async fn claim_l2(
     };
 
     // num hashes on average to solve challenge: 2^15
-    if let Err(e) = Challenge::check_solution(&ip, solution.0) {
+    if let Err(e) = Challenge::check_solution(Chain::L2, &ip, solution.0) {
         return Err((StatusCode::BAD_REQUEST, e.to_string()));
     }
 
