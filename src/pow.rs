@@ -16,10 +16,9 @@ use kanal::Sender;
 use parking_lot::{Mutex, MutexGuard};
 use rand::{rng, Rng};
 use sha2::{Digest, Sha256};
-use shrex::Hex;
 use terrors::OneOf;
 use tokio::{select, time::sleep};
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::{display_err, err, Chain};
 
@@ -74,23 +73,13 @@ impl Challenge {
         };
         match challenge_set().cas((ip.to_bits(), chain), None, Some(challenge.clone())) {
             Ok(None) => {
-                info!(
-                    "issued new challenge for {ip} on {chain:?}: {:?}",
-                    Hex(challenge.nonce)
-                );
                 EVICTION_Q.add_challenge(&challenge, *ip, chain);
                 challenge
             }
             Err(CasFailure {
                 actual: Some(challenge),
                 ..
-            }) => {
-                info!(
-                    "retrieved existing challenge for {ip} on {chain:?}: {:?}",
-                    Hex(challenge.nonce)
-                );
-                challenge
-            }
+            }) => challenge,
             // Unreachable as this CAS will return a Some(..) only
             // in an Err.
             Ok(Some(_)) => unreachable!(),
