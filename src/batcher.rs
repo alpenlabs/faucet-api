@@ -1,7 +1,10 @@
-use std::{collections::VecDeque, sync::Arc, time::Duration};
+use std::{
+    collections::VecDeque,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use bdk_wallet::bitcoin::{self, Amount};
-use chrono::Utc;
 use kanal::{unbounded_async, AsyncSender, SendError};
 use parking_lot::{RwLock, RwLockWriteGuard};
 use serde::{Deserialize, Serialize};
@@ -133,7 +136,7 @@ impl Batcher {
                             // triple nested spawn!
                             spawn_blocking(move || {
                                 let mut l1w = l1_wallet.write();
-                                l1w.apply_unconfirmed_txs([(tx, Utc::now().timestamp() as u64)]);
+                                l1w.apply_unconfirmed_txs([(tx, SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64)]);
                                 l1w.persist(&mut Persister).expect("persist should work");
                             })
                             .await
