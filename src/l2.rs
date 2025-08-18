@@ -78,7 +78,7 @@ impl L2Wallet {
             <EthereumWallet as NetworkWallet<Ethereum>>::default_signer_address(&wallet)
         );
 
-        let provider = ProviderBuilder::new().wallet(wallet).on_http(
+        let provider = ProviderBuilder::new().wallet(wallet).connect_http(
             SETTINGS
                 .l2_http_endpoint
                 .parse()

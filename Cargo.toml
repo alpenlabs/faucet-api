@@ -11,7 +11,7 @@ members = [".", "utils/html-solver"]
 tokio = "1.46.1"
 
 [dependencies]
-alloy = { version = "0.13.0", features = [
+alloy = { version = "1", features = [
   "std",
   "rpc-client-ws",
   "network",
@@ -20,25 +20,20 @@ alloy = { version = "0.13.0", features = [
   "providers",
   "rpc-types",
 ] }
-arrayvec = "0.7.6"
 axum = { version = "0.8.1", features = ["http2"] }
 axum-client-ip = "1.1.3"
-axum-macros = "0.5.0"
-bdk_esplora = { version = "0.20.1", features = [
+bdk_esplora = { version = "0.22.1", features = [
   "async-https-rustls",
   "tokio",
 ], default-features = false }
-bdk_wallet = { version = "1.2.0", features = ["rusqlite"] }
+bdk_wallet = { version = "2.1.0", features = ["rusqlite"] }
 bip39 = "2.2.0"
-chrono = { version = "0.4.41", default-features = false, features = ["now"] }
-colored = "3.0.0"
 concurrent-map = "5.0.37"
 config = { version = "0.15.11", features = ["toml"], default-features = false }
 kanal = "0.1.1"
 parking_lot = "0.12.4"
 rand = "0.9.1"
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.142"
 sha2 = { version = "0.10.9", features = ["asm", "loongarch64_asm"] }
 shrex = { git = "https://github.com/alpenlabs/alpen", features = [
   "axum",
@@ -67,3 +62,16 @@ lto = true        # Enable Link Time Optimization
 codegen-units = 1 # Reduced to increase optimizations
 panic = "abort"   # Abort on panic
 strip = "symbols" # Strip symbols from binary
+
+[workspace.lints]
+rust.missing_debug_implementations = "warn"
+rust.rust_2018_idioms = { level = "deny", priority = -1 }
+rust.unreachable_pub = "warn"
+rust.unused_crate_dependencies = "deny"
+rust.unused_must_use = "deny"
+rust.unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(coverage, coverage_nightly)',
+] }
+rust.missing_docs = "warn"
+rustdoc.all = "warn"
+clippy.too_long_first_doc_paragraph = "warn"
