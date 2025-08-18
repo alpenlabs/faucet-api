@@ -3865,8 +3865,9 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "shrex"
-version = "0.3.0-alpha.1"
-source = "git+https://github.com/alpenlabs/alpen#93a0f6a5b745eddda57eba97a1c964934b66dc33"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba7682492cbdf4ee8db2b2634a2b87554c81bdc35ed22266e92b81f9120f13f0"
 dependencies = [
  "axum 0.7.9",
  "serde",
