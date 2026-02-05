@@ -1,6 +1,5 @@
 use std::{
     cell::RefCell,
-    collections::BTreeSet,
     io,
     ops::{Deref, DerefMut},
     rc::Rc,
@@ -22,7 +21,7 @@ use bdk_wallet::{
 };
 use parking_lot::RwLock;
 use tokio::time::sleep;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::{seed::Seed, SETTINGS};
 
@@ -145,21 +144,10 @@ impl L1Wallet {
     pub fn spawn_syncer(l1_wallet: Arc<RwLock<L1Wallet>>) {
         tokio::spawn(async move {
             loop {
-                let req = l1_wallet
-                    .read()
-                    .start_full_scan()
-                    .inspect({
-                        let mut once = BTreeSet::<KeychainKind>::new();
-                        move |keychain, spk_i, _| {
-                            if once.insert(keychain) {
-                                debug!("Scanning keychain [{:?}]", keychain);
-                            }
-                            debug!(" {:<3}", spk_i);
-                        }
-                    })
-                    .build();
-                // do full scans because the miner is sending to our public descriptor
-                let update = match ESPLORA_CLIENT.full_scan(req, 3, 10).await {
+                let req = l1_wallet.read().start_sync_with_revealed_spks().build();
+                // sync is ok because we only receive on our single address
+                // logged on startup
+                let update = match ESPLORA_CLIENT.sync(req, 10).await {
                     Ok(u) => u,
                     Err(e) => {
                         error!("{e:?}");
